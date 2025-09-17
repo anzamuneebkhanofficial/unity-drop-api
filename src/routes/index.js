@@ -1,0 +1,11 @@
+/** @format */
+
+import { Router } from 'express';
+import AdminRoutes from './admin.routes.js';
+import DonorRoutes from './donor.routes.js';
+import PatientRoutes from './patient.routes.js';
+const router = Router();
+router.use('/admin', AdminRoutes);
+router.use('/donor', DonorRoutes);
+router.use('/patient', PatientRoutes);
+export default router;
