@@ -12,20 +12,21 @@ import FinalAdminRoutes from './routes/index.js';
 import './lib/passportConfig.js';
 
 const app = express();
-
+// ✅ Fix for express-rate-limit + Vercel/Proxy
+app.set('trust proxy', 1);
 // ✅ Rate Limiting (global)
-const globalLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: process.env.NODE_ENV === 'production' ? 30 : 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Too many requests, slow down.',
-});
+// const globalLimiter = rateLimit({
+//   windowMs: 10 * 60 * 1000, // 10 minutes
+//   max: process.env.NODE_ENV === 'production' ? 30 : 300,
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   message: 'Too many requests, slow down.',
+// });
 
-app.use(globalLimiter);
+// app.use(globalLimiter);
 
 // ✅ Security headers
-app.use(helmet());
+// app.use(helmet());
 
 // ✅ CORS
 const allowedOrigins = [process.env.FrontEnd_URL];
@@ -41,8 +42,8 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // ✅ Sanitizers (NoSQL injection + XSS)
-app.use(expressMongoSanitize());
-app.use(xss());
+// app.use(expressMongoSanitize());
+// app.use(xss());
 
 // ✅ Cookies & Passport
 app.use(cookieParser());
