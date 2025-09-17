@@ -8,11 +8,11 @@ import dbConnection from './src/config/db/dbconnection.js';
 const PORT = process.env.PORT || 8000;
 
 /**
- * Start the server
- * - In development → starts Express normally
- * - In production (Vercel/Netlify) → only exports app
+ * Always connect to DB
+ * - In dev → also start Express server
+ * - In prod (Vercel/Netlify) → export app, platform handles server
  */
-const startServer = async () => {
+const init = async () => {
   try {
     await dbConnection();
 
@@ -21,16 +21,14 @@ const startServer = async () => {
         console.log(`✅ Server running at http://localhost:${PORT}`);
       });
     } else {
-      console.log('🚀 Production environment: serverless-ready, DB connected');
+      console.log('🚀 Production environment: DB connected, serverless-ready');
     }
   } catch (error) {
-    console.error('❌ Server failed to start:', error);
+    console.error('❌ Server init failed:', error);
   }
 };
 
-// Only run server if NOT running in serverless
-if (process.env.NODE_ENV === 'development') {
-  startServer();
-}
+// Always init (for both dev & prod)
+init();
 
-export default app; // For Vercel/Netlify serverless
+export default app; // For Vercel/Netlify
