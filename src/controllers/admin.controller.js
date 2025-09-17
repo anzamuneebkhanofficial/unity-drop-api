@@ -121,6 +121,18 @@ const RegisterAdmin = async (req, res) => {
       availabilityStatus,
       key,
     } = req.body;
+    // console.log(
+    //   'FullName',
+    //   fullName,
+    //   email,
+    //   password,
+    //   password_confirmation,
+    //   gender,
+    //   phone,
+    //   availabilityStatus,
+    //   key
+    // );
+
     if (
       !fullName ||
       !email ||
@@ -147,11 +159,11 @@ const RegisterAdmin = async (req, res) => {
     }
     // Max 3 admins check
     const adminCount = await Admin.countDocuments();
-    if (adminCount >= 3) {
+    if (adminCount >= 2) {
       return res.status(403).json({
         success: false,
         message:
-          'Maximum 3 admins allowed. Ask the app owner or a Super Admin to increase the limit.',
+          'Maximum 2 admins allowed. Ask the app owner or a Super Admin to increase the limit.',
         data: null,
       });
     }
@@ -189,6 +201,7 @@ const RegisterAdmin = async (req, res) => {
       availabilityStatus,
     });
     await newUser.save();
+    // console.log('newUser', newUser);
     // // ✅ 6. Mark key as used
     // adminKey.isUsed = true;
     // await adminKey.save();

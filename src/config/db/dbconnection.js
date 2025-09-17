@@ -1,7 +1,9 @@
 /** @format */
 import mongoose from 'mongoose';
 
-let cached = global.mongoose; // Reuse connection across hot-reloads & serverless calls
+mongoose.set('strictQuery', false); // global setting
+
+let cached = global.mongoose;
 
 if (!cached) {
   cached = global.mongoose = { conn: null, promise: null };
@@ -11,16 +13,13 @@ const dbConnection = async () => {
   const DATABASE_URL = process.env.DATABASE_URL;
 
   if (!DATABASE_URL) {
-    console.error('❌ DATABASE_URL is not defined in your .env file');
-    process.exit(1);
+    throw new Error('❌ DATABASE_URL is not defined in environment variables');
   }
 
-  // Already connected
   if (cached.conn) {
     return cached.conn;
   }
 
-  // First connection
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
@@ -34,10 +33,10 @@ const dbConnection = async () => {
   try {
     cached.conn = await cached.promise;
     return cached.conn;
-  } catch (err) {
+  } catch (error) {
     cached.promise = null;
-    console.error('❌ MongoDB connection failed:', err);
-    process.exit(1);
+    console.error('❌ MongoDB connection failed:', error);
+    throw error; // serverless-safe
   }
 };
 

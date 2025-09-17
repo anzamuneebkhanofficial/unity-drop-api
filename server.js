@@ -1,34 +1,23 @@
 /** @format */
 import dotenv from 'dotenv';
-dotenv.config({ path: './.env', debug: false });
+dotenv.config({ path: './.env' });
 
 import app from './src/app.js';
 import dbConnection from './src/config/db/dbconnection.js';
 
 const PORT = process.env.PORT || 8000;
 
-/**
- * Always connect to DB
- * - In dev → also start Express server
- * - In prod (Vercel/Netlify) → export app, platform handles server
- */
-const init = async () => {
-  try {
-    await dbConnection();
+// Initialize DB (runs once per serverless instance)
+dbConnection()
+  .then(() => console.log('🚀 MongoDB connected'))
+  .catch((err) => console.error('❌ DB connection error:', err));
 
-    if (process.env.NODE_ENV === 'development') {
-      app.listen(PORT, () => {
-        console.log(`✅ Server running at http://localhost:${PORT}`);
-      });
-    } else {
-      console.log('🚀 Production environment: DB connected, serverless-ready');
-    }
-  } catch (error) {
-    console.error('❌ Server init failed:', error);
-  }
-};
+// Only start a server locally
+if (process.env.NODE_ENV === 'development') {
+  app.listen(PORT, () => {
+    console.log(`✅ Server running at http://localhost:${PORT}`);
+  });
+}
 
-// Always init (for both dev & prod)
-init();
-
-export default app; // For Vercel/Netlify
+// ✅ Export app for Vercel serverless
+export default app;

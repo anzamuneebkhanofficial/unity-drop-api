@@ -2,7 +2,6 @@
 
 import Patient from '../models/patient.model.js';
 import Otp from '../models/otp.model.js';
-import EmailVerification from '../services/email/emailVerification.js';
 import bcrypt from 'bcryptjs';
 import {
   generateTokens,
@@ -25,10 +24,11 @@ import {
   SYSTEM_MATCH_PROMPT,
 } from '../services/aiPrompts.js';
 import { callGemini } from '../services/aiClient.js';
+import EmailVerification from '../services/email/EmailVerification.js';
 
 const RegisterPatient = async (req, res) => {
   try {
-    const {
+    let {
       fullName,
       email,
       password,
@@ -44,6 +44,21 @@ const RegisterPatient = async (req, res) => {
       hospitalLocation,
     } = req.body;
 
+    // ✅ Normalize bloodGroup
+    if (typeof bloodGroup === 'string') {
+      bloodGroup = bloodGroup.trim();
+      if (bloodGroup === 'AB') {
+        bloodGroup = 'AB+';
+      } else if (bloodGroup === 'O') {
+        bloodGroup = 'O+';
+      } else if (bloodGroup === 'A') {
+        bloodGroup = 'A+';
+      } else if (bloodGroup === 'B') {
+        bloodGroup = 'B+';
+      }
+    }
+
+    // console.log('bloodGroup', bloodGroup);
     // Required fields check
     if (
       !fullName ||
@@ -60,14 +75,12 @@ const RegisterPatient = async (req, res) => {
         .json({ message: 'All required fields must be filled' });
     }
 
-    // Confirm password match
     if (password !== password_confirmation) {
       return res
         .status(400)
         .json({ message: 'Password and confirm password do not match' });
     }
 
-    // Check if email already exists
     const existingUser = await Patient.findOne({ email });
     if (existingUser) {
       return res.status(409).json({ message: 'Email already exists' });
@@ -78,7 +91,7 @@ const RegisterPatient = async (req, res) => {
       email,
       password,
       gender,
-      bloodGroup,
+      bloodGroup, // ✅ cleaned version
       location,
       address,
       phone,
@@ -91,7 +104,7 @@ const RegisterPatient = async (req, res) => {
     await newPatient.save();
 
     try {
-      await EmailVerification(req, newPatient); // send OTP email
+      await EmailVerification(req, newPatient);
     } catch (err) {
       console.error('Failed to send verification email:', err.message);
     }
@@ -106,6 +119,7 @@ const RegisterPatient = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 const verifyEmailForPatient = async (req, res) => {
   try {
     const { otp, email } = req.body;

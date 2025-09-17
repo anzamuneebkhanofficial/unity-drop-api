@@ -43,6 +43,19 @@ const RegisterDonor = async (req, res) => {
       availabilityStatus,
     } = req.body;
 
+    // ✅ Normalize bloodGroup
+    if (typeof bloodGroup === 'string') {
+      bloodGroup = bloodGroup.trim();
+      if (bloodGroup === 'AB') {
+        bloodGroup = 'AB+';
+      } else if (bloodGroup === 'O') {
+        bloodGroup = 'O+';
+      } else if (bloodGroup === 'A') {
+        bloodGroup = 'A+';
+      } else if (bloodGroup === 'B') {
+        bloodGroup = 'B+';
+      }
+    }
     // Required fields check
     if (
       !fullName ||
