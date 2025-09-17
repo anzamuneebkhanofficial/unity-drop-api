@@ -1,7 +1,7 @@
 /** @format */
 import mongoose from 'mongoose';
 
-mongoose.set('strictQuery', false); // global setting
+mongoose.set('strictQuery', false);
 
 let cached = global.mongoose;
 
@@ -13,20 +13,14 @@ const dbConnection = async () => {
   const DATABASE_URL = process.env.DATABASE_URL;
 
   if (!DATABASE_URL) {
-    throw new Error('❌ DATABASE_URL is not defined in environment variables');
+    throw new Error('❌ DATABASE_URL is not defined');
   }
 
-  if (cached.conn) {
-    return cached.conn;
-  }
+  if (cached.conn) return cached.conn;
 
   if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-
     cached.promise = mongoose
-      .connect(DATABASE_URL, opts)
+      .connect(DATABASE_URL, { bufferCommands: false })
       .then((mongooseInstance) => mongooseInstance);
   }
 
@@ -35,8 +29,7 @@ const dbConnection = async () => {
     return cached.conn;
   } catch (error) {
     cached.promise = null;
-    console.error('❌ MongoDB connection failed:', error);
-    throw error; // serverless-safe
+    throw error;
   }
 };
 
