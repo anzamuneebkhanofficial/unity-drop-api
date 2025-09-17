@@ -1,7 +1,7 @@
 /** @format */
 import mongoose from 'mongoose';
 
-let cached = global.mongoose; // For hot reload in development
+let cached = global.mongoose; // Reuse connection across hot-reloads & serverless calls
 
 if (!cached) {
   cached = global.mongoose = { conn: null, promise: null };
@@ -15,27 +15,24 @@ const dbConnection = async () => {
     process.exit(1);
   }
 
-  // Reuse existing connection if available
+  // Already connected
   if (cached.conn) {
     return cached.conn;
   }
 
+  // First connection
   if (!cached.promise) {
     const opts = {
-      // Modern Mongoose defaults; no deprecated options
-      bufferCommands: false, // disables mongoose buffering
+      bufferCommands: false,
     };
 
     cached.promise = mongoose
       .connect(DATABASE_URL, opts)
-      .then((mongooseInstance) => {
-        return mongooseInstance;
-      });
+      .then((mongooseInstance) => mongooseInstance);
   }
 
   try {
     cached.conn = await cached.promise;
-    // console.log(`✅ MongoDB connected at ${cached.conn.connection.host}`);
     return cached.conn;
   } catch (err) {
     cached.promise = null;
