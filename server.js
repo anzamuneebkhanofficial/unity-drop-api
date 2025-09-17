@@ -7,12 +7,17 @@ import dbConnection from './src/config/db/dbconnection.js';
 
 const PORT = process.env.PORT || 8000;
 
-// Initialize DB (runs once per serverless instance)
-dbConnection()
-  .then(() => console.log('🚀 MongoDB connected'))
-  .catch((err) => console.error('❌ DB connection error:', err));
+// ✅ Connect to DB (serverless-safe, caches connection)
+try {
+  await dbConnection();
+  console.log('🚀 MongoDB connected');
+} catch (err) {
+  console.error('❌ DB connection error:', err);
+  // Optional: stop the function if DB is not connected
+  // process.exit(1);
+}
 
-// Only start a server locally
+// Only start a server locally (for development)
 if (process.env.NODE_ENV === 'development') {
   app.listen(PORT, () => {
     console.log(`✅ Server running at http://localhost:${PORT}`);

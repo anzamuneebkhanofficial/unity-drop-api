@@ -12,7 +12,7 @@ import FinalAdminRoutes from './routes/index.js';
 import './lib/passportConfig.js';
 
 const app = express();
-
+app.set('trust proxy', 1);
 // ✅ Rate Limiting (global)
 const globalLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
