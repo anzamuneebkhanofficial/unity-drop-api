@@ -9,7 +9,6 @@ import {
 } from '../services/token/token.service.js';
 import jwt from 'jsonwebtoken';
 import PasswordVerificationEmail from '../services/email/PasswordVerifyEmail.js';
-import PasswordVerifyModel from '../models/passwordVerify.model.js';
 import Donor from '../models/donor.model.js';
 import DonorRequest from '../models/donorRequest.model.js';
 import warningModel from '../models/warning.model.js';
@@ -25,6 +24,7 @@ import {
 } from '../services/aiPrompts.js';
 import { callGemini } from '../services/aiClient.js';
 import EmailVerification from '../services/email/EmailVerification.js';
+import PasswordVerifyModel from '../models/PasswordVerify.model.js';
 
 const RegisterPatient = async (req, res) => {
   try {
