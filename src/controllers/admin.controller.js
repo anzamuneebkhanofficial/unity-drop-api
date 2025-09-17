@@ -2,7 +2,7 @@
 
 import Admin from '../models/admin.model.js';
 import Otp from '../models/otp.model.js';
-import EmailVerification from '../services/email/emailVerification.js';
+
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import {
@@ -21,6 +21,7 @@ import warningModel from '../models/warning.model.js';
 import feedbackModel from '../models/feedback.model.js';
 import crypto from 'crypto';
 import superKeyModel from '../models/superKey.model.js';
+import EmailVerification from '../services/email/EmailVerification.js';
 export const generateSuperKey = async (req, res) => {
   try {
     const { superAdminId } = req.body;

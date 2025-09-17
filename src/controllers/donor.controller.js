@@ -2,7 +2,6 @@
 
 import Donor from '../models/donor.model.js';
 import Otp from '../models/otp.model.js';
-import EmailVerification from '../services/email/emailVerification.js';
 import bcrypt from 'bcryptjs';
 import {
   generateTokens,
@@ -28,6 +27,7 @@ import {
   SYSTEM_MATCH_PROMPT,
 } from '../services/aiPrompts.js';
 import { callGemini } from '../services/aiClient.js';
+import EmailVerification from '../services/email/EmailVerification.js';
 const RegisterDonor = async (req, res) => {
   try {
     const {
