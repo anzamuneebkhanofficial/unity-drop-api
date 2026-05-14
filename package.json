@@ -1,19 +1,39 @@
 {
-  "name": "blood-donor",
+  "name": "unity-drop-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "Production-grade Node.js backend for Unity Drop Blood Donation Management System. Featuring serverless/traditional deployment logic, secured JWT authentication, and optimized MongoDB indexing.",
+  "keywords": [
+    "blood-donation-management",
+    "backend-api",
+    "express-js",
+    "mongodb-optimized",
+    "serverless-ready",
+    "jwt-security"
+  ],
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+  "unityDrop": {
+    "type": "backend",
+    "mission": "To provide a secure, real-time lifeline for blood seekers using advanced matching algorithms.",
+    "problem": "Manual blood donation processes are slow and prone to errors, leading to life-threatening delays.",
+    "solution": "An automated, secured Node.js backend that handles real-time donor-patient matching and email-based communication.",
+    "impact": "Reduces the 'time-to-matching' significantly through a high-performance MongoDB indexing architecture.",
+    "features": [
+      "Serverless/Traditional hybrid deployment",
+      "Geospatial query optimization",
+      "JWT-based secure authentication"
+    ]
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "scripts": {
+    "predev": "npx kill-port 8000 || exit 0",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "node tests/ut-1-otp-generation.test.js && node tests/ut-2-password-encryption.test.js",
+    "test:ut1": "node tests/ut-1-otp-generation.test.js",
+    "test:ut2": "node tests/ut-2-password-encryption.test.js"
+  },
   "type": "module",
   "dependencies": {
     "@exortek/express-mongo-sanitize": "^1.1.0",
-    "@google/genai": "^1.17.0",
     "async-retry": "^1.3.3",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
@@ -23,14 +43,17 @@
     "express-rate-limit": "^8.1.0",
     "express-xss-sanitizer": "^2.0.0",
     "helmet": "^8.1.0",
+    "lru-cache": "^11.2.7",
     "mongoose": "^8.18.0",
     "mongoose-paginate-v2": "^1.9.1",
+    "morgan": "^1.10.1",
     "nodemailer": "^7.0.6",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.17.2",
     "uuid": "^11.1.0",
-    "xlsx": "^0.18.5",
-    "xlsx-import": "^2.4.7"
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "xlsx": "^0.18.5"
   }
 }
