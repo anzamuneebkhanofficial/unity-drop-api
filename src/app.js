@@ -23,6 +23,9 @@ import FinalAdminRoutes from './routes/index.js';
 
 const app = express();
 
+// 🚀 -1. TRUST PROXY: Required for express-rate-limit in production (Render, Vercel, etc.)
+app.set('trust proxy', 1);
+
 // 🚀 0. GUARANTEED LIFE-LOG: Raw request interception
 app.use((req, res, next) => {
   Logger.info(`\n[TRAFFIC DETECTED] HTTP ${req.method} ${req.originalUrl}`);

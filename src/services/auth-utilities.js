@@ -63,8 +63,9 @@ export const performLogin = (user, userModel, res) => {
   // Generate new tokens
   const { accessToken, accessTokenExp } = generateTokens(user);
   
-  // Set auth cookies
-  setTokensCookies(res, { accessToken });
+  // Set auth cookies (passing the role for frontend middleware)
+  const role = user.role || userModel.toLowerCase();
+  setTokensCookies(res, { accessToken, role });
   
   // Return consistent response object
   return {

@@ -30,7 +30,7 @@ export const generateTokens = (user) => {
 // Set cookies
 import config from '../../config/env.js';
 
-export const setTokensCookies = (res, { accessToken }) => {
+export const setTokensCookies = (res, { accessToken, role }) => {
   // Common cookie settings optimized for Production (Vercel + Render) vs Development
   const common = {
     httpOnly: true,
@@ -42,6 +42,12 @@ export const setTokensCookies = (res, { accessToken }) => {
 
   // Secure token cookie
   res.cookie('accessToken', accessToken, common);
+
+  // Secure role cookie (required for frontend middleware)
+  res.cookie('role', role, {
+    ...common,
+    httpOnly: false, // Frontend needs to read this for middleware/routing
+  });
 
   // Frontend-friendly auth state cookie
   // Note: httpOnly is false here so the frontend can detect if the user is logged in
