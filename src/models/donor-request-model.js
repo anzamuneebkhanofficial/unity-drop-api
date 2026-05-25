@@ -1,14 +1,12 @@
-/** @format */
-
 import mongoose from 'mongoose';
-
+import config from '../config/env.js';
 const DonorRequestSchema = new mongoose.Schema(
   {
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Patient',
       required: true,
-      index: true, // reference index
+      index: true,
     },
     donorId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -20,7 +18,6 @@ const DonorRequestSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    // Detailed fields from request images
     patientAge: {
       type: Number,
     },
@@ -34,13 +31,13 @@ const DonorRequestSchema = new mongoose.Schema(
       type: String,
     },
     pickAndDrop: {
-      type: String, // "Yes", "No", or custom message
+      type: String,
     },
     exchangePossibility: {
-      type: String, // "Yes", "No"
+      type: String,
     },
     caseDescription: {
-      type: String, // e.g., "Child Delivery"
+      type: String,
     },
     attendantName: {
       type: String,
@@ -56,18 +53,13 @@ const DonorRequestSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: true,
-      default: () => {
-        const days = Number(process.env.DONATION_REQUEST_EXPIRY_DAYS) || 7;
-        return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-      },
+      default: () => new Date(Date.now() + config.donation.requestExpiryMs),
     },
   },
   { timestamps: true }
 );
-// Optional: MongoDB TTL index to automatically remove documents after expiration
 DonorRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-DonorRequestSchema.index({ createdAt: -1 }); // index for sorting by newest
-
+DonorRequestSchema.index({ patientId: 1, donorId: 1 }, { unique: true });
 const DonorRequest =
   mongoose.models.DonorRequest ||
   mongoose.model('DonorRequest', DonorRequestSchema);

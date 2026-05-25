@@ -1,8 +1,5 @@
-/** @format */
-
 import express from 'express';
 const router = express.Router();
-
 import { authenticateJWT } from '../middlewares/auth-middleware.js';
 import {
   addFeedback,
@@ -23,19 +20,19 @@ import {
   updatePatientRequestStatusByDonor,
   verifyEmailForDonor,
 } from '../controllers/donor-controller.js';
-import { cacheMiddleware } from '../middlewares/cache-middleware.js';
-import { autoResetCache } from '../middlewares/invalidate-cache-middleware.js';
-import { CacheNamespaces } from '../utils/cache-keys.js';
+import { cacheMiddleware, autoResetCache } from '../middlewares/cache-middleware.js';
+import { CacheNamespaces } from '../cache/constants.js';
 import { verifyCaptcha } from '../middlewares/verify-captcha.js';
 import {
   authLimiter,
 } from './../middlewares/rate-limiters.js';
-//Public Routes
-router.post('/donor-register', authLimiter, verifyCaptcha, RegisterDonor);
+// Public Routes
+router.post('/donor-register', authLimiter, verifyCaptcha, autoResetCache([CacheNamespaces.DONORS, CacheNamespaces.STATS, CacheNamespaces.USERS]), RegisterDonor);
 router.post(
   '/verify-email-for-donor',
   authLimiter,
   verifyCaptcha,
+  autoResetCache([CacheNamespaces.DONORS, CacheNamespaces.STATS, CacheNamespaces.USERS]),
   verifyEmailForDonor
 );
 router.post('/donor-login', authLimiter, verifyCaptcha, DonorLogin);
@@ -49,68 +46,68 @@ router.post(
   '/donor-password-reset/:id/:token',
   authLimiter,
   verifyCaptcha,
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.DONORS, CacheNamespaces.USERS]),
   DonorPasswordReset,
 );
 // Private Routes
-// Change password - clears donor profile cache
 router.put(
   '/donor-change-password',
   authenticateJWT(['donor']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.DONORS, CacheNamespaces.USERS]),
   changeDonorPassword,
 );
 router.post('/donor-logout', authenticateJWT(['donor']), DonorLogout);
 router.get(
   '/get-donor',
   authenticateJWT(['donor']),
+  cacheMiddleware(CacheNamespaces.DONORS),
   GetDonor
 );
-// Delete donor - clears donor profile, donors list, and stats
 router.delete(
   '/donor-delete-ourself',
   authenticateJWT(['donor']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.DONORS, CacheNamespaces.STATS, CacheNamespaces.REQUESTS, CacheNamespaces.FEEDBACKS, CacheNamespaces.USERS]),
   DonorDeleteOurSelf,
 );
+// Patient Lookup
 router.get(
   '/get-all-patients-for-donor',
   authenticateJWT(['donor']),
-
+  cacheMiddleware(CacheNamespaces.PATIENTS),
   getAllPatientsForDonor,
 );
 router.get(
   '/get-patient-by-id-for-donor/:id',
   authenticateJWT(['donor']),
+  cacheMiddleware(CacheNamespaces.PATIENTS),
   getPatientByIdForDonor,
 );
+router.get('/filter-all-patients', authenticateJWT(['donor']), cacheMiddleware(CacheNamespaces.PATIENTS), filterPatients);
+// Request Management
 router.get(
   '/get-all-patient-requests-for-donor',
   authenticateJWT(['donor']),
+  cacheMiddleware(CacheNamespaces.REQUESTS),
   getAllPatientRequestsForDonor,
 );
-// Update request status - clears donor requests cache
 router.put(
   '/update-patient-request-status-by-donor/:id',
   authenticateJWT(['donor']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.REQUESTS, CacheNamespaces.STATS]),
   updatePatientRequestStatusByDonor,
 );
-// Update profile - clears donor profile cache and stats
+// Profile & Feedback
 router.put(
   '/donor-update-profile',
   authenticateJWT(['donor']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.DONORS, CacheNamespaces.USERS]),
   DonorUpdateProfile,
 );
 router.get(
   '/get-stats',
   authenticateJWT(['donor']),
-
+  cacheMiddleware(CacheNamespaces.STATS),
   getStats
 );
-// Add feedback - clears feedbacks cache
-router.post('/feedback/add', authenticateJWT(['donor']), autoResetCache(), addFeedback);
-// Filter patients - clears patients cache
-router.get('/filter-all-patients', authenticateJWT(['donor']), cacheMiddleware(CacheNamespaces.PATIENTS), filterPatients);
+router.post('/feedback/add', authenticateJWT(['donor']), autoResetCache([CacheNamespaces.FEEDBACKS]), addFeedback);
 export default router;

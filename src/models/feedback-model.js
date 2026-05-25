@@ -1,5 +1,6 @@
 /** @format */
 import mongoose, { Schema } from 'mongoose';
+import config from '../config/env.js';
 
 const feedbackSchema = new Schema(
   {
@@ -22,7 +23,7 @@ const feedbackSchema = new Schema(
     rating: {
       type: Number,
       min: 1,
-      max: 5, // optional, if you want rating system (1–5 stars)
+      max: 5,
     },
     reaction: {
       type: String,
@@ -30,11 +31,8 @@ const feedbackSchema = new Schema(
     },
     expiresAt: {
       type: Date,
-      default: () => {
-        const days = Number(process.env.FEEDBACK_EXPIRY_DAYS) || 7;
-        return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-      },
-      index: { expires: '0s' }, // MongoDB TTL index
+      default: () => new Date(Date.now() + config.donation.feedbackExpiryMs),
+      index: { expires: '0s' },
     },
   },
   { timestamps: true }

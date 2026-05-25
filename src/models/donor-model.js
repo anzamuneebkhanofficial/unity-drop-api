@@ -5,19 +5,6 @@ import bcrypt from 'bcryptjs';
 import mongoosePaginate from 'mongoose-paginate-v2';
 const DonorSchema = new mongoose.Schema(
   {
-    // DonateRequestId: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: 'Patient',
-    // },
-    // DonateBloodRequestType: {
-    //   type: String,
-    //   enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
-    // },
-    // DonateBloodRequetStatus: {
-    //   type: String,
-    //   enum: ['Pending', 'Accepted', 'Rejected'],
-    //   default: 'Pending',
-    // },
     fullName: {
       type: String,
       required: true,
@@ -42,7 +29,7 @@ const DonorSchema = new mongoose.Schema(
       required: true,
     },
     location: {
-      type: String, // City / Area
+      type: String,
       required: true,
     },
 
@@ -52,7 +39,7 @@ const DonorSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: true,
-      index: true, // single index — donors searched/filtered by phone
+      index: true,
     },
     emailVerified: {
       type: Boolean,
@@ -61,7 +48,7 @@ const DonorSchema = new mongoose.Schema(
     role: { type: String, default: 'donor' },
   },
   {
-    timestamps: true, // 👈 this needs a comma before
+    timestamps: true,
   }
 );
 DonorSchema.pre('save', async function (next) {
@@ -73,16 +60,12 @@ DonorSchema.pre('save', async function (next) {
     next(new Error(`Error hashing password: ${error.message}`));
   }
 });
-// ✅ Add same indexes
+
 DonorSchema.index({ bloodGroup: 1 });
 DonorSchema.index({ location: 1 });
-
-
-
 DonorSchema.index({ fullName: 'text' });
-DonorSchema.index({ createdAt: -1 }); // index for sorting by newest
+DonorSchema.index({ createdAt: -1 });
 DonorSchema.index({ bloodGroup: 1, location: 1 });
-// ✅ Add pagination plugin
 DonorSchema.plugin(mongoosePaginate);
 const Donor = mongoose.models.Donor || mongoose.model('Donor', DonorSchema);
 export default Donor;

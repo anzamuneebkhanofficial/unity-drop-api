@@ -12,7 +12,7 @@ const OtpSchema = new Schema(
     userModel: {
       type: String,
       required: true,
-      enum: ['Admin', 'Donor', 'Patient'], // Which collection to use
+      enum: ['Admin', 'Donor', 'Patient'],
     },
     otpNumber: {
       type: Number,
@@ -21,7 +21,7 @@ const OtpSchema = new Schema(
     otpExpirationTime: {
       type: Date,
       required: true,
-      index: { expires: 0 }, // use actual Date value
+      index: { expires: 0 },
     },
   },
   { timestamps: true }

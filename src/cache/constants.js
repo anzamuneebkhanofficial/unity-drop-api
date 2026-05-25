@@ -1,9 +1,3 @@
-/** @format */
-
-/**
- * A central registry for all resources to easily clear cache without
- * leaking keys accidentally across unrelated items.
- */
 export const CacheNamespaces = {
   USERS: 'users',
   ADMINS: 'admins',
@@ -13,5 +7,4 @@ export const CacheNamespaces = {
   REQUESTS: 'requests',
   STATS: 'stats',
 };
-
 export default CacheNamespaces;

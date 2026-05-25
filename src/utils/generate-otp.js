@@ -1,5 +1,4 @@
 /** @format */
-
 import { v4 as uuidv4 } from 'uuid';
 export const generateOtp = (length) => {
   if (length !== 4 && length !== 6) {

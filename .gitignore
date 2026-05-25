@@ -7,9 +7,8 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 
-# Environment variables
-.env            # root .env
-**/.env         # any .env file in any folder
+.env
+**/.env
 
 
 # Runtime data

@@ -1,5 +1,4 @@
 /** @format */
-
 import express from 'express';
 const router = express.Router();
 import { authenticateJWT } from '../middlewares/auth-middleware.js';
@@ -20,24 +19,21 @@ import {
   addFeedback,
   getStats,
   sendBloodRequestToDonor,
+  getAllDonorRequestsForPatient,
 } from '../controllers/patient-controller.js';
-import { cacheMiddleware } from '../middlewares/cache-middleware.js';
-import { autoResetCache } from '../middlewares/invalidate-cache-middleware.js';
-import { CacheNamespaces } from '../utils/cache-keys.js';
+import { cacheMiddleware, autoResetCache } from '../middlewares/cache-middleware.js';
+import { CacheNamespaces } from '../cache/constants.js';
 import { verifyCaptcha } from '../middlewares/verify-captcha.js';
 import { authLimiter } from '../middlewares/rate-limiters.js';
-
-// =========================
 // Public Routes
-// =========================
-router.post('/patient-register', authLimiter, verifyCaptcha, RegisterPatient);
+router.post('/patient-register', authLimiter, verifyCaptcha, autoResetCache([CacheNamespaces.PATIENTS, CacheNamespaces.STATS, CacheNamespaces.USERS]), RegisterPatient);
 router.post(
   '/verify-email-for-patient',
   authLimiter,
   verifyCaptcha,
+  autoResetCache([CacheNamespaces.PATIENTS, CacheNamespaces.STATS, CacheNamespaces.USERS]),
   verifyEmailForPatient
 );
-
 router.post('/patient-login', authLimiter, verifyCaptcha, PatientLogin);
 router.post(
   '/patient-password-reset-link',
@@ -49,66 +45,68 @@ router.post(
   '/patient-password-reset/:id/:token',
   authLimiter,
   verifyCaptcha,
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.PATIENTS, CacheNamespaces.USERS]),
   PatientPasswordReset
 );
-router.get(
-  '/get-stats',
-  authenticateJWT(['patient']),
-
-  getStats
-);
-// =========================
 // Private Routes
-// =========================
-// Change password - clears patient profile cache
 router.put(
   '/patient-change-password',
   authenticateJWT(['patient']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.PATIENTS, CacheNamespaces.USERS]),
   changePatientPassword
 );
 router.post('/patient-logout', authenticateJWT(['patient']), PatientLogout);
 router.get(
   '/get-patient',
   authenticateJWT(['patient']),
-
+  cacheMiddleware(CacheNamespaces.PATIENTS),
   GetPatient
 );
-// Delete patient - clears patient profile, patients list, and stats
 router.delete(
   '/patient-delete-ourself',
   authenticateJWT(['patient']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.PATIENTS, CacheNamespaces.STATS, CacheNamespaces.REQUESTS, CacheNamespaces.FEEDBACKS, CacheNamespaces.USERS]),
   PatientDeleteOurSelf
 );
+router.put(
+  '/patient-update-profile',
+  authenticateJWT(['patient']),
+  autoResetCache([CacheNamespaces.PATIENTS, CacheNamespaces.USERS]),
+  PatientUpdateProfile
+);
+// Donor Look
 router.get(
   '/get-all-donors-for-patient',
   authenticateJWT(['patient']),
-
+  cacheMiddleware(CacheNamespaces.DONORS),
   getAllDonorsForPatient,
 );
 router.get(
   '/get-donor-by-id-for-patient/:id',
   authenticateJWT(['patient']),
-
+  cacheMiddleware(CacheNamespaces.DONORS),
   getDonorByIdForPatient,
 );
-// Send blood request - clears donor requests, patient requests, and stats
+router.get('/filter-donors', authenticateJWT(['patient']), cacheMiddleware(CacheNamespaces.DONORS), filterDonors);
+// Blood Requests & System
 router.post(
   '/send-blood-request-to-donor/:donorId',
   authenticateJWT(['patient']),
-  autoResetCache(),
+  autoResetCache([CacheNamespaces.REQUESTS, CacheNamespaces.STATS]),
   sendBloodRequestToDonor
 );
-// Update profile - clears patient profile cache and stats
-router.put(
-  '/patient-update-profile',
+router.get(
+  '/get-all-donor-requests-for-patient',
   authenticateJWT(['patient']),
-  autoResetCache(),
-  PatientUpdateProfile
+  cacheMiddleware(CacheNamespaces.REQUESTS),
+  getAllDonorRequestsForPatient
 );
+router.get(
+  '/get-stats',
+  authenticateJWT(['patient']),
+  cacheMiddleware(CacheNamespaces.STATS),
+  getStats
+);
+router.post('/feedback/add', authenticateJWT(['patient']), autoResetCache([CacheNamespaces.FEEDBACKS]), addFeedback);
 
-// Add feedback - clears feedbacks cache
-router.post('/feedback/add', authenticateJWT(['patient']), autoResetCache(), addFeedback);
 export default router;

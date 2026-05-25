@@ -1,19 +1,18 @@
-/** @format */
 
 import mongoose, { Schema } from 'mongoose';
-
+import config from '../config/env.js';
 const PasswordEmailVerifySchema = new Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      refPath: 'userModel', // Dynamic reference
-      index: true, // reference index
+      refPath: 'userModel',
+      index: true,
     },
     userModel: {
       type: String,
       required: true,
-      enum: ['Admin', 'Donor', 'Patient'], // Same as RefreshToken
+      enum: ['Admin', 'Donor', 'Patient'],
     },
     PassToken: {
       type: String,
@@ -22,20 +21,15 @@ const PasswordEmailVerifySchema = new Schema(
     PassTokenExpiration: {
       type: Date,
       required: true,
-      default: () => {
-        const mins = Number(process.env.PASSWORD_RESET_EXPIRY_MINUTES) || 5;
-        return new Date(Date.now() + mins * 60 * 1000);
-      },
-      expires: 0, // TTL index, auto delete at PassTokenExpiration
+      default: () => new Date(Date.now() + config.otp.passwordResetExpiryMs),
+      expires: 0,
     },
   },
   {
-    timestamps: true, // createdAt + updatedAt
+    timestamps: true,
   }
 );
-
 const PasswordVerifyModel =
   mongoose.models.PasswordVerification ||
   mongoose.model('PasswordVerification', PasswordEmailVerifySchema);
-
 export default PasswordVerifyModel;

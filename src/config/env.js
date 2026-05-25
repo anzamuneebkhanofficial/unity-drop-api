@@ -1,84 +1,56 @@
-/** @format */
 import dotenv from 'dotenv';
-import path from 'path';
-
-// Load .env relative to project root
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
-const requiredEnv = [
-  'DATABASE_URL',
-  'JWT_ACCESS_TOKEN_SECRET_KEY',
-  'JWT_REFRESH_TOKEN_SECRET_KEY',
-  'JWT_SECRET',
-  'FRONTEND_URL',
-];
-
-const optionalEnv = [
-  'NODE_ENV',
-  'PORT',
-  'PASSWORD_RESET_TOKEN_PRIVATE_KEY',
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_SERVICE',
-  'SMTP_USER',
-  'SMTP_PASS',
-  'SMTP_FROM_EMAIL',
-  'RECAPTCHA_SITE_KEY',
-  'RECAPTCHA_SECRET_KEY',
-
-  'PLATFORM',
-];
-
-// Check for missing required keys
-const missingKeys = requiredEnv.filter((key) => !process.env[key]);
-
-if (missingKeys.length > 0) {
-  throw new Error(`❌ Missing required environment variables: ${missingKeys.join(', ')}`);
-}
-
-// Validate optional environment variables and provide defaults
-const validateEnvVar = (key, defaultValue = null, type = 'string') => {
-  const value = process.env[key];
-  if (value === undefined) return defaultValue;
-  
-  switch (type) {
-    case 'number':
-      const num = parseInt(value, 10);
-      return isNaN(num) ? defaultValue : num;
-    case 'boolean':
-      return value === 'true' || value === '1';
-    default:
-      return value;
-  }
-};
-
+import { parseDurationToMs, getDurationText } from '../utils/duration-helper.js';
+dotenv.config();
+const required = ['DATABASE_URL', 'JWT_ACCESS_TOKEN_SECRET_KEY', 'JWT_REFRESH_TOKEN_SECRET_KEY', 'JWT_SECRET', 'FRONTEND_URL'];
+const missing = required.filter(key => !process.env[key]);
+if (missing.length > 0) throw new Error(`Missing required env variables: ${missing.join(', ')}`);
+const env = process.env;
 const config = {
-  env: validateEnvVar('NODE_ENV', 'development'),
-  isProduction: validateEnvVar('NODE_ENV') === 'production',
-  isDevelopment: validateEnvVar('NODE_ENV') !== 'production',
-  port: validateEnvVar('PORT', 8000, 'number'),
-  databaseUrl: process.env.DATABASE_URL,
-  frontendUrl: process.env.FRONTEND_URL,
+  env: env.NODE_ENV || 'development',
+  isProduction: env.NODE_ENV === 'production',
+  port: parseInt(env.PORT) || 8000,
+  platform: env.PLATFORM || 'development',
+  logLevel: env.LOG_LEVEL || 'info',
+  databaseUrl: env.DATABASE_URL,
+  frontendUrl: env.FRONTEND_URL,
   jwt: {
-    accessSecret: process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
-    refreshSecret: process.env.JWT_REFRESH_TOKEN_SECRET_KEY,
-    secret: process.env.JWT_SECRET,
-    resetKey: validateEnvVar('PASSWORD_RESET_TOKEN_PRIVATE_KEY'),
+    accessSecret: env.JWT_ACCESS_TOKEN_SECRET_KEY,
+    refreshSecret: env.JWT_REFRESH_TOKEN_SECRET_KEY,
+    secret: env.JWT_SECRET,
+    resetKey: env.PASSWORD_RESET_TOKEN_PRIVATE_KEY || null,
   },
+
   smtp: {
-    host: validateEnvVar('SMTP_HOST'),
-    port: validateEnvVar('SMTP_PORT', null, 'number'),
-    service: validateEnvVar('SMTP_SERVICE'),
-    user: validateEnvVar('SMTP_USER'),
-    pass: validateEnvVar('SMTP_PASS'),
-    from: validateEnvVar('SMTP_FROM_EMAIL'),
+    host: env.SMTP_HOST || null,
+    port: parseInt(env.SMTP_PORT) || null,
+    service: env.SMTP_SERVICE || null,
+    user: env.SMTP_USER || null,
+    pass: env.SMTP_PASS || null,
+    from: env.SMTP_FROM_EMAIL || null,
   },
   recaptcha: {
-    siteKey: validateEnvVar('RECAPTCHA_SITE_KEY'),
-    secretKey: validateEnvVar('RECAPTCHA_SECRET_KEY'),
+    siteKey: env.RECAPTCHA_SITE_KEY || null,
+    secretKey: env.RECAPTCHA_SECRET_KEY || null,
   },
-
-  platform: validateEnvVar('PLATFORM', 'development'), // 'vercel', 'render', or 'development'
+  cache: {
+    ttlMs: parseDurationToMs(env.CACHE_TTL_MINUTES, 5, 'm'),
+    ttlMinutes: parseDurationToMs(env.CACHE_TTL_MINUTES, 5, 'm') / (60 * 1000), // backward compatibility
+  },
+  otp: {
+    expiryMs: parseDurationToMs(env.OTP_EXPIRY_MINUTES, 2, 'm'),
+    expiryText: getDurationText(env.OTP_EXPIRY_MINUTES, 2, 'm'),
+    passwordResetExpiryMs: parseDurationToMs(env.PASSWORD_RESET_EXPIRY_MINUTES, 2, 'm'),
+    passwordResetExpiryText: getDurationText(env.PASSWORD_RESET_EXPIRY_MINUTES, 2, 'm'),
+  },
+  donation: {
+    requestExpiryMs: parseDurationToMs(env.DONATION_REQUEST_EXPIRY_DAYS, 7, 'd'),
+    requestExpiryText: getDurationText(env.DONATION_REQUEST_EXPIRY_DAYS, 7, 'd'),
+    feedbackExpiryMs: parseDurationToMs(env.FEEDBACK_EXPIRY_DAYS, 7, 'd'),
+    feedbackExpiryText: getDurationText(env.FEEDBACK_EXPIRY_DAYS, 7, 'd'),
+  },
+  admin: {
+    quotaLimit: parseInt(env.ADMIN_QUOTA_LIMIT) || 2,
+  },
 };
 
 export default config;

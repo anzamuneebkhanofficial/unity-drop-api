@@ -23,27 +23,13 @@ const PatientSchema = new mongoose.Schema(
       enum: ['Male', 'Female', 'Other'],
       required: true,
     },
-    // NeedBloodRequestType: {
-    //   type: String,
-    //   enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
-    //   required: true,
-    // },
-    // NeedBloodRequestStatus: {
-    //   type: String,
-    //   enum: ['Pending', 'Approved', 'Rejected'],
-    //   default: 'Pending',
-    // },
-    // NeedRequest: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: 'Donor',
-    // },
     bloodGroup: {
       type: String,
       enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
       required: true,
     },
     location: {
-      type: String, // City / Area
+      type: String,
       required: true,
     },
 
@@ -53,11 +39,11 @@ const PatientSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: true,
-      index: true, // single index — patients searched/filtered by phone
+      index: true,
     },
     hospitalName: {
       type: String,
-      index: true, // patients often searched by hospital
+      index: true,
     },
     hospitalAddress: {
       type: String,
@@ -75,7 +61,7 @@ const PatientSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // ✅ correct placement
+    timestamps: true,
   }
 );
 PatientSchema.pre('save', async function (next) {
@@ -87,19 +73,13 @@ PatientSchema.pre('save', async function (next) {
     next(new Error(`Error hashing password: ${error.message}`));
   }
 });
-// ✅ Create indexes for faster filtering
 PatientSchema.index({ bloodGroup: 1 });
 PatientSchema.index({ location: 1 });
 
-
-
 PatientSchema.index({ fullName: 'text' });
-PatientSchema.index({ createdAt: -1 }); // index for sorting by newest
-// 🔥 If you want to filter by both together often
+PatientSchema.index({ createdAt: -1 });
 PatientSchema.index({ bloodGroup: 1, location: 1 });
-// ✅ Add pagination plugin
 PatientSchema.plugin(mongoosePaginate);
 const Patient =
   mongoose.models.Patient || mongoose.model('Patient', PatientSchema);
-
 export default Patient;
