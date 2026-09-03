@@ -132,8 +132,8 @@ const verifyEmailForAdmin = async (req, res) => {
     }
     if (user.emailVerified) {
       return res.status(400).json({
-        message: 'Email is already checked, please log in',
-        error: 'Email is already checked, please log in',
+        message: 'Email is already verified, please log in',
+        error: 'Email is already verified, please log in',
         success: false,
         data: null,
       });

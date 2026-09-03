@@ -143,12 +143,6 @@ const DonorLogin = async (req, res) => {
         .status(400)
         .json({ status: false, message: 'Please verify your email' });
     }
-    if (user.isBanned) {
-      return res.status(403).json({
-        status: false,
-        message: 'Your account has been permanently terminated due to policy violations.',
-      });
-    }
     const isMatchPassword = await bcrypt.compare(password, user.password);
     if (!isMatchPassword) {
       return res

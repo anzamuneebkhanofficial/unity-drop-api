@@ -376,6 +376,7 @@ const getAllDonorsForPatient = async (req, res) => {
   try {
     const { page = 1, limit = 10, name, bloodGroup, location } = req.query;
     const query = {};
+    query.emailVerified = true;
     if (name) query.fullName = { $regex: name, $options: 'i' };
     if (bloodGroup) query.bloodGroup = bloodGroup;
     if (location) query.location = { $regex: location, $options: 'i' };
@@ -553,10 +554,16 @@ const addFeedback = async (req, res) => {
     // Logger.info('userId', userId);
     // Logger.info('req.user.role', req.user.role);
     const userModel = req.user.role === 'donor' ? 'Donor' : 'Patient';
-    if (!message) {
+    if (!message?.trim()) {
       return res
         .status(400)
         .json({ success: false, message: 'Feedback message is required' });
+    }
+    if (rating && (rating < 1 || rating > 5)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5',
+      });
     }
     const allowedReactions = ['👍', '❤️', '😂', '😮', '😢', '😡', '🔥', '💡', '🤔', '👀'];
     if (reaction && !allowedReactions.includes(reaction)) {
@@ -588,6 +595,7 @@ const filterDonors = async (req, res) => {
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
     const query = {};
+    query.emailVerified = true;
     if (bloodGroup) query.bloodGroup = bloodGroup;
     if (location) query.location = { $regex: location, $options: 'i' };
     if (name) query.fullName = { $regex: name, $options: 'i' };
