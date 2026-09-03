@@ -74,7 +74,7 @@ const RegisterAdmin = async (req, res) => {
     if (existingUser) {
       if (!existingUser.emailVerified) {
         EmailVerification(req, existingUser).catch((err) =>
-          Logger.error('Could not resend email:', err.message)
+          Logger.error(`Could not resend email: ${err.message || err}`)
         );
         return res.status(200).json({
           success: true,
@@ -101,7 +101,7 @@ const RegisterAdmin = async (req, res) => {
     });
     await newUser.save();
     EmailVerification(req, newUser).catch((err) =>
-      Logger.error('Could not send email:', err.message)
+      Logger.error(`Could not send email: ${err.message || err}`)
     );
     return res.status(201).json({
       success: true,

@@ -53,7 +53,7 @@ const RegisterDonor = async (req, res) => {
     if (existingUser) {
       if (!existingUser.emailVerified) {
         EmailVerification(req, existingUser).catch((err) =>
-          Logger.error('Could not resend email:', err.message)
+          Logger.error(`Could not resend email: ${err.message || err}`)
         );
         return res.status(200).json({
           message: 'Account already created! A new OTP has been sent to your email.',
@@ -78,7 +78,7 @@ const RegisterDonor = async (req, res) => {
     });
     await newDonor.save();
     EmailVerification(req, newDonor).catch((err) =>
-      Logger.error('Failed to send verification email:', err.message)
+      Logger.error(`Failed to send verification email: ${err.message || err}`)
     );
     return res.status(201).json({
       message:

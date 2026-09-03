@@ -57,7 +57,7 @@ const RegisterPatient = async (req, res) => {
     if (existingUser) {
       if (!existingUser.emailVerified) {
         EmailVerification(req, existingUser).catch((err) =>
-          Logger.error('Could not resend email:', err.message)
+          Logger.error(`Could not resend email: ${err.message || err}`)
         );
         return res.status(200).json({
           message: 'Account already created! A new OTP has been sent to your email.',
@@ -86,7 +86,7 @@ const RegisterPatient = async (req, res) => {
     });
     await newPatient.save();
     EmailVerification(req, newPatient).catch((err) =>
-      Logger.error('Failed to send verification email:', err.message)
+      Logger.error(`Failed to send verification email: ${err.message || err}`)
     );
     return res.status(201).json({
       message:
