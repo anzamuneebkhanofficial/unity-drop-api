@@ -51,6 +51,15 @@ const RegisterDonor = async (req, res) => {
     }
     const existingUser = await Donor.findOne({ email });
     if (existingUser) {
+      if (!existingUser.emailVerified) {
+        EmailVerification(req, existingUser).catch((err) =>
+          Logger.error('Could not resend email:', err.message)
+        );
+        return res.status(200).json({
+          message: 'Account already created! A new OTP has been sent to your email.',
+          donor: existingUser,
+        });
+      }
       return res.status(409).json({
         message: 'Email already exists',
         success: false,
@@ -68,13 +77,10 @@ const RegisterDonor = async (req, res) => {
       phone,
     });
     await newDonor.save();
-    try {
-      await EmailVerification(req, newDonor);
-    } catch (err) {
-      Logger.error('Failed to send verification email:', err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(201).json({
+    EmailVerification(req, newDonor).catch((err) =>
+      Logger.error('Failed to send verification email:', err.message)
+    );
+    return res.status(201).json({
       message:
         'Donor Registration successful! Please verify your email to activate your account.',
       donor: newDonor,

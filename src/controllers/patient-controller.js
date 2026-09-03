@@ -55,6 +55,16 @@ const RegisterPatient = async (req, res) => {
     }
     const existingUser = await Patient.findOne({ email });
     if (existingUser) {
+      if (!existingUser.emailVerified) {
+        EmailVerification(req, existingUser).catch((err) =>
+          Logger.error('Could not resend email:', err.message)
+        );
+        return res.status(200).json({
+          message: 'Account already created! A new OTP has been sent to your email.',
+          success: true,
+          patient: existingUser,
+        });
+      }
       return res.status(409).json({
         message: 'Email already exists',
         success: false,
@@ -75,13 +85,10 @@ const RegisterPatient = async (req, res) => {
       hospitalLocation,
     });
     await newPatient.save();
-    try {
-      await EmailVerification(req, newPatient);
-    } catch (err) {
-      Logger.error('Failed to send verification email:', err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(201).json({
+    EmailVerification(req, newPatient).catch((err) =>
+      Logger.error('Failed to send verification email:', err.message)
+    );
+    return res.status(201).json({
       message:
         'Patient Registration successful! Please verify your email to activate your account.',
       success: true,

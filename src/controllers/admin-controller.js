@@ -72,6 +72,16 @@ const RegisterAdmin = async (req, res) => {
 
     const existingUser = await Admin.findOne({ email });
     if (existingUser) {
+      if (!existingUser.emailVerified) {
+        EmailVerification(req, existingUser).catch((err) =>
+          Logger.error('Could not resend email:', err.message)
+        );
+        return res.status(200).json({
+          success: true,
+          message: 'Account already created! A new OTP has been sent to your email.',
+          data: existingUser,
+        });
+      }
       return res
         .status(409)
         .json({ success: false, message: 'This email is already used', data: null });
@@ -90,12 +100,10 @@ const RegisterAdmin = async (req, res) => {
       canDelete: isFirstAdmin ? true : false,
     });
     await newUser.save();
-    try {
-      await EmailVerification(req, newUser);
-    } catch (err) {
-      Logger.error('Could not send email:', err.message);
-    }
-    res.status(201).json({
+    EmailVerification(req, newUser).catch((err) =>
+      Logger.error('Could not send email:', err.message)
+    );
+    return res.status(201).json({
       success: true,
       message: 'Admin account made! Please check your email to continue.',
       data: newUser,
