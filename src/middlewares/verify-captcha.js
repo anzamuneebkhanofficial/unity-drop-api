@@ -38,7 +38,10 @@ export const verifyCaptcha = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Captcha verification failed. Please try again.' });
     }
     if (data.score !== undefined && data.score < 0.5) {
-      return res.status(403).json({ success: false, message: 'Suspicious activity detected.' });
+      return res.status(403).json({
+        success: false,
+        message: 'Security verification failed. Please refresh the page and try again.',
+      });
     }
     next();
   } catch (err) {
