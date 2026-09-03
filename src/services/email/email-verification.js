@@ -4,6 +4,8 @@ import Otp from '../../models/otp-model.js';
 import { generateOtp } from '../../utils/generate-otp.js';
 import sendEmail from './email-helper.js';
 import config from '../../config/env.js';
+import Logger from '../../utils/logger.js';
+
 const EmailVerification = async (req, user) => {
   // Logger.info(user);
   if (!user?.email) {
@@ -11,6 +13,10 @@ const EmailVerification = async (req, user) => {
   }
   const otp = generateOtp(4);
   const otpExpiration = new Date(Date.now() + config.otp.expiryMs);
+
+  Logger.info(`🔑 [DEMO / BACKUP OTP] for ${user.email}: ${otp}`);
+  console.log(`\n==============================================\n🔑 [DEMO / BACKUP OTP] for ${user.email}: ${otp}\n==============================================\n`);
+
   await Otp.create({
     userId: user._id,
     userModel:
