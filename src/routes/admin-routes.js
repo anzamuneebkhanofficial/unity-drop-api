@@ -49,7 +49,7 @@ router.post(
 // Private Routes
 router.put('/admin-change-password', authenticateJWT(['admin']), autoResetCache([CacheNamespaces.ADMINS, CacheNamespaces.USERS]), changePassword);
 router.post('/admin-logout', authenticateJWT(['admin']), AdminLogout);
-router.get('/get-admin', authenticateJWT(['admin']), cacheMiddleware(CacheNamespaces.ADMINS), GetAdmin);
+router.get('/get-admin', authenticateJWT(['admin']), GetAdmin);
 router.delete('/admin-delete-ourself', authenticateJWT(['admin']), autoResetCache([CacheNamespaces.ADMINS, CacheNamespaces.STATS, CacheNamespaces.USERS]), AdminDeleteOurSelf);
 // Donor Management
 router.get('/get-all-donors-from-admin', authenticateJWT(['admin']), cacheMiddleware(CacheNamespaces.DONORS), getAllDonorsForAdmin);

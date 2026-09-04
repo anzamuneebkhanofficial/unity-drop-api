@@ -38,6 +38,7 @@ const RegisterAdmin = async (req, res) => {
       gender,
       phone,
       location,
+      availabilityStatus,
     } = req.body;
     if (
       !fullName ||
@@ -86,6 +87,14 @@ const RegisterAdmin = async (req, res) => {
         .status(409)
         .json({ success: false, message: 'This email is already used', data: null });
     }
+
+    const existingPhone = await Admin.findOne({ phone });
+    if (existingPhone) {
+      return res
+        .status(409)
+        .json({ success: false, message: 'This phone number is already registered', data: null });
+    }
+
     const normalizedGender = normalizeGender(gender);
     const isFirstAdmin = adminCount === 0;
     const newUser = new Admin({
@@ -98,6 +107,7 @@ const RegisterAdmin = async (req, res) => {
       isSuperAdmin: isFirstAdmin,
       approvalStatus: isFirstAdmin ? 'approved' : 'pending',
       canDelete: isFirstAdmin ? true : false,
+      availabilityStatus: availabilityStatus || false,
     });
     await newUser.save();
     EmailVerification(req, newUser).catch((err) =>
@@ -109,6 +119,14 @@ const RegisterAdmin = async (req, res) => {
       data: newUser,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      const isPhone = error.keyPattern && error.keyPattern.phone;
+      return res.status(409).json({
+        success: false,
+        message: isPhone ? 'This phone number is already registered' : 'This email is already used',
+        data: null,
+      });
+    }
     Logger.error('Register Admin error:', error.message);
     res.status(500).json({
       success: false,
@@ -469,6 +487,7 @@ const getAllDonorsForAdmin = async (req, res) => {
       limit: parseInt(limit, 10),
       sort: { createdAt: -1 },
       select: '-password', // Hide password
+      lean: true,
     };
     const result = await Donor.paginate(query, options);
     res.status(200).json({
@@ -494,7 +513,7 @@ const getAllDonorsForAdmin = async (req, res) => {
 const getSingleDonor = async (req, res) => {
   try {
     const { id } = req.params;
-    const donor = await Donor.findById(id);
+    const donor = await Donor.findById(id).select('-password').lean();
     Logger.info(`Got Donor: ${donor ? donor._id : 'NULL'}`);
     if (!donor)
       return res
@@ -588,6 +607,7 @@ const getAllPatientsForAdmin = async (req, res) => {
       limit: parseInt(limit, 10),
       sort: { createdAt: -1 },
       select: '-password', // Hide password
+      lean: true,
     };
     const result = await Patient.paginate(query, options);
     res.status(200).json({
@@ -613,7 +633,7 @@ const getAllPatientsForAdmin = async (req, res) => {
 const getSinglePatient = async (req, res) => {
   try {
     const { id } = req.params;
-    const patient = await Patient.findById(id).select('-password');
+    const patient = await Patient.findById(id).select('-password').lean();
     Logger.info(`Got Patient: ${patient ? patient._id : 'NULL'}`);
     if (!patient)
       return res
@@ -767,7 +787,8 @@ const getAllAdmins = async (req, res) => {
       .select('-password')
       .sort({ createdAt: -1 })
       .skip((options.page - 1) * options.limit)
-      .limit(options.limit);
+      .limit(options.limit)
+      .lean();
 
     const totalAdmins = await Admin.countDocuments(query);
     res.status(200).json({
@@ -827,14 +848,27 @@ const AdminUpdateProfile = async (req, res, next) => {
       'gender',
       'phone',
       'location',
+      'availabilityStatus',
     ];
-    fields.forEach((field) => {
+    for (const field of fields) {
       if (typeof body[field] !== 'undefined') {
         let val = body[field];
         if (field === 'gender') val = normalizeGender(val);
         newUserData[field] = val;
       }
-    });
+    }
+
+    if (newUserData.phone) {
+      const existingPhone = await Admin.findOne({
+        phone: newUserData.phone,
+        _id: { $ne: currentUser.id },
+      });
+      if (existingPhone) {
+        return res
+          .status(409)
+          .json({ success: false, message: 'This phone number is already registered' });
+      }
+    }
     const updatedUser = await Admin.findByIdAndUpdate(
       currentUser.id,
       { $set: newUserData },
@@ -853,6 +887,12 @@ const AdminUpdateProfile = async (req, res, next) => {
       user: userObj,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'This phone number is already registered',
+      });
+    }
     Logger.error('Admin update profile error:', error.message);
     res.status(500).json({
       success: false,
@@ -871,7 +911,8 @@ const getAllFeedbacks = async (req, res) => {
       .populate('userId', 'fullName email phone location')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
     const totalFeedbacks = await feedbackModel.countDocuments();
     return res.status(200).json({
       success: true,

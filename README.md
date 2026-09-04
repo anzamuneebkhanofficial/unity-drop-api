@@ -1,191 +1,302 @@
-# Unity Drop API - Backend Services Developer Manual
+# Unity Drop API — Backend Developer Manual
 
-The Unity Drop API is a secure, structured Express.js backend that acts as the core database and coordination engine for the Unity Drop Blood Donation Management System. It manages user authentication, role-based access, automated caching, email OTP verification, captcha validation, rate limiting, and system logging.
+The **Unity Drop API** is a secure, production-grade **Express 5 / Node.js** backend that powers the entire Unity Drop Blood Donation Management System. It handles all user authentication, role-based access control (RBAC), real-time request coordination, automated email delivery, in-memory caching, and system logging.
 
 ---
 
 ## 🛠️ Technology Stack
 
-* **Server Environment**: **Node.js** running an **Express 5** server configured in ES Modules (`"type": "module"`).
-* **Database Layer**: **MongoDB** connected using **Mongoose** schemas with optimized indexes and automatic pagination handlers (`mongoose-paginate-v2`).
-* **Session Security**: **Passport.js** using the **JWT (passport-jwt)** strategy to authenticate API sessions securely via httpOnly cookies.
-* **Database Caching**: Custom in-memory **LRU-Cache** module to store heavy database query aggregates (e.g. stats, list configurations).
-* **Logging System**: **Winston** with a daily rotating file transport to log operations, warnings, and errors.
-* **Email Service**: **Nodemailer** SMTP configurations to send registration verification codes (OTP) and password reset links.
+| Layer | Technology |
+|---|---|
+| Server Runtime | Node.js + Express 5 (ES Modules) |
+| Database | MongoDB Atlas via Mongoose |
+| Authentication | Passport.js + JWT (HttpOnly Cookies) |
+| Password Security | bcryptjs (salt factor 10) |
+| Caching | LRU-Cache (namespace-based invalidation) |
+| Email Delivery | Nodemailer (SMTP via Gmail) |
+| Logging | Winston + daily rotating log files |
+| Security | Helmet, express-rate-limit, mongo-sanitize, xss-sanitizer |
+| Pagination | mongoose-paginate-v2 |
+| Deployment | Render (production) / Vercel (serverless fallback) |
 
 ---
 
-## 📂 Backend Project Directory Structure
+## 📂 Project Directory Structure
 
 ```
 unity-drop-api/
 ├── src/
-│   ├── app.js                 # Global express configuration and middleware setup
-│   ├── server.js              # Server entry point and bootloader
-│   ├── cache/                 # Smart LRU Cache setup, namespaces, and utility clears
-│   ├── config/                # Environment variables and CORS configuration
-│   ├── controllers/           # Logical request handlers for Admins, Donors, and Patients
-│   ├── jobs/                  # Background automation tasks
-│   ├── lib/                   # Passport strategies and authentication helpers
-│   ├── middlewares/           # Authentication validation, rate limiters, recaptchas, caching hooks
-│   ├── models/                # MongoDB Mongoose schemas
-│   ├── routes/                # Express router path configurations
-│   ├── services/              # Authentication helpers, email and Nodemailer triggers
-│   └── utils/                 # Winston logging setup
-├── logs/                      # Automatically generated daily system log files
-├── tests/                     # Local automated unit test files
-├── server.js                  # Standalone local launcher script
-└── vercel.json               # Serverless host configurations
+│   ├── app.js                  # Express app config, global middlewares, route mounting
+│   ├── cache/
+│   │   ├── config.js           # LRU-Cache instance and TTL settings
+│   │   ├── constants.js        # CacheNamespaces (donors, patients, admins, stats, etc.)
+│   │   └── utils.js            # deleteByNamespace() and resetEntireCache() utilities
+│   ├── config/
+│   │   └── env.js              # Centralized environment variable config object
+│   ├── controllers/
+│   │   ├── admin-controller.js
+│   │   ├── donor-controller.js
+│   │   ├── patient-controller.js
+│   │   └── public-feedback-controller.js
+│   ├── lib/
+│   │   └── passport-config.js  # JWT strategy (reads role from token, loads user from DB)
+│   ├── middlewares/
+│   │   ├── auth-middleware.js       # authenticateJWT(roles[]) guard factory
+│   │   ├── cache-middleware.js      # cacheMiddleware() + autoResetCache()
+│   │   ├── global-error-handler.js  # Centralized Express error handler
+│   │   ├── morgan-middleware.js     # HTTP request logger
+│   │   ├── rate-limiters.js         # globalLimiter + authLimiter
+│   │   └── verify-captcha.js        # Google ReCAPTCHA v2 server-side validation
+│   ├── models/
+│   │   ├── admin-model.js
+│   │   ├── donor-model.js          # Compound indexes: bloodGroup+location, fullName text
+│   │   ├── patient-model.js
+│   │   ├── donor-request-model.js  # TTL index on expiresAt (auto-deletes expired requests)
+│   │   ├── otp-model.js
+│   │   ├── password-verify-model.js
+│   │   ├── feedback-model.js
+│   │   └── public-feedback-model.js
+│   ├── routes/
+│   │   ├── index.js                # Main router (mounts /admin, /donor, /patient, /public)
+│   │   ├── admin-routes.js
+│   │   ├── donor-routes.js
+│   │   ├── patient-routes.js
+│   │   └── public-feedback-routes.js
+│   ├── services/
+│   │   └── email/
+│   │       └── email-helper.js     # Nodemailer SMTP sender (sendEmail utility)
+│   └── utils/
+│       ├── logger.js               # Winston logger (console + daily rotating file)
+│       └── generate-otp.js         # Cryptographically secure 6-digit OTP generator
+├── logs/                           # Auto-generated daily log files (gitignored)
+├── server.js                       # Local development entry point
+├── vercel.json                     # Serverless deployment config
+├── .env.example                    # Environment variable template (copy to .env)
+└── package.json
 ```
 
 ---
 
-## ⚡ Key Core Abstractions
+## ⚡ Core Architecture Explained
 
-### 1. Smart Caching Architecture (`/src/cache`)
-To prevent redundant database lookups and speed up general response times, a centralized caching system is implemented using `lru-cache`.
-* **Namespaces (`CacheNamespaces`)**:
-  * `admins`: Cached lists and profile states of administrative users.
-  * `donors`: Cached profile details and searches of blood donors.
-  * `patients`: Cached patient profiles and lists.
-  * `requests`: Active blood requests.
-  * `stats`: Heavy aggregation counts (total blood requests, verified users, etc.).
-  * `feedbacks`: User feedback reports.
-  * `users`: Cached admin filters.
-* **Cache Middleware (`cacheMiddleware`)**: Intercepts `GET` requests and automatically serves matching data from memory if it exists.
-* **Cache Auto-Reset Hook (`autoResetCache`)**: Mounted on mutating requests (like `POST`, `PUT`, `DELETE`). It automatically clears matching cache namespaces when data is modified to prevent stale data.
+### 1. Smart LRU Caching System (`/src/cache`)
+To eliminate redundant MongoDB queries on frequently-read data, a centralized namespace-based caching system is built on `lru-cache`.
 
-### 2. Multi-Tier Security Middlewares
-* **Rate-Limiting**:
-  * `globalLimiter`: Shields the backend from denial-of-service attempts.
-  * `authLimiter`: Strict limitation applied to login, registration, and OTP verification endpoints to prevent brute-force attacks.
-* **Sanitation**:
-  * `express-mongo-sanitize`: Automatically strips MongoDB command keys (like `$`) from user inputs to prevent NoSQL injections.
-  * `express-xss-sanitizer`: Sanitizes and filters HTML/script tags from user inputs.
-* **ReCAPTCHA Verification (`verifyCaptcha`)**:
-  * Intercepts new registration and login requests to validate the client Google ReCAPTCHA token before executing any database operation.
+**Cache Namespaces:**
+| Namespace | What It Caches |
+|---|---|
+| `donors` | Donor lists, search results, single donor lookups |
+| `patients` | Patient lists, search results, single patient lookups |
+| `admins` | Admin lists, approval states |
+| `requests` | Active blood donation request records |
+| `stats` | Aggregated system statistics (counts) |
+| `feedbacks` | User feedback logs |
+| `users` | Combined admin filter/search results |
 
-### 3. Core System Logging
-* **Winston Logger**: Logs system events into two targets:
-  * **Console**: Color-coded debug logs for active local development.
-  * **Daily Rotating Files (`logs/system-%DATE%.log`)**: Persisted audit files that rotate daily, keeping operational logs and errors clean and structured.
+**How It Works:**
+- `cacheMiddleware(namespace)` — Mounted on `GET` routes. Intercepts the request, returns cached data if found. If not found, lets the controller run and caches the result automatically.
+- `autoResetCache([namespaces])` — Mounted on `POST`, `PUT`, `DELETE`, `PATCH` routes that modify data. Instantly purges the relevant namespace(s) so the next `GET` fetches fresh data from MongoDB.
+
+### 2. Multi-Tier Security
+- **HttpOnly JWT Cookies** — Access tokens never exposed to JavaScript. Sent only over secure connections.
+- **Passport.js JWT Strategy** — On every protected request, the token is decoded and the user is re-fetched from MongoDB by role (`admin`, `donor`, `patient`).
+- **Role-Based Guards** — `authenticateJWT(['admin'])`, `authenticateJWT(['donor'])`, `authenticateJWT(['patient'])` — Each route only accepts the correct role.
+- **Rate Limiting** — `authLimiter` caps login/register/OTP endpoints. `globalLimiter` protects all other routes.
+- **Input Sanitization** — `express-mongo-sanitize` strips `$` operators. `express-xss-sanitizer` removes script/HTML tags.
+- **Helmet** — Sets secure HTTP response headers automatically.
+
+### 3. Database Optimizations
+- All read-only queries use **`.lean()`** — returns plain JS objects (3–5× faster serialization).
+- **Projections** on all queries — passwords are never returned to clients.
+- **Compound indexes** on Donor and Patient models for fast blood group + location searches.
+- **TTL index** on `DonorRequest.expiresAt` — MongoDB auto-deletes expired requests.
+- **Pagination** via `mongoose-paginate-v2` on all list endpoints.
 
 ---
 
-## 💾 Database Schemas & Models (`/src/models`)
+## 💾 Database Models (`/src/models`)
 
-The database architecture is designed with clear separation and referential integrity using Mongoose:
-1. **Admin Model (`admin-model.js`)**: Holds details of administrative users, including email, encrypted password, role (`admin`), status, and admin privileges.
-2. **Donor Model (`donor-model.js`)**: Holds blood donor accounts, their available blood group, phone number, location (city/state), health status, and coordinates.
-3. **Patient Model (`patient-model.js`)**: Holds patient accounts, location details, compatible blood needs, and medical requests.
-4. **OTP Model (`otp-model.js`)**: Manages short-lived email verification One-Time Passwords.
-5. **Password Verify Model (`password-verify-model.js`)**: Handles secure reset tokens for user password recovery.
-6. **Donor Request Model (`donor-request-model.js`)**: Tracks blood donation coordination requests between patients and donors.
-7. **Feedback Model (`feedback-model.js`)**: Logs feedback and bug reports sent by donors or patients.
-8. **Public Feedback Model (`public-feedback-model.js`)**: Logs general feedback submitted via public landing forms.
+| Model | Purpose |
+|---|---|
+| `Admin` | Admin accounts with role, approval status, and delete privilege |
+| `Donor` | Donor profiles with blood group, location, and availability status |
+| `Patient` | Patient profiles with hospital info and blood needs |
+| `DonorRequest` | Blood request records (Pending / Approved / Rejected), auto-expires |
+| `Otp` | Short-lived 6-digit email verification codes |
+| `PasswordVerifyModel` | Secure reset tokens for password recovery flows |
+| `Feedback` | Private feedback submitted by donors/patients to admins |
+| `PublicFeedback` | Public landing page feedback submissions |
 
 ---
 
 ## 📡 API Endpoint Reference
 
-### 🔐 Authentication & Session Endpoints
-* `POST /api/admin/register` — Register an admin account *(requires Captcha validation)*.
-* `POST /api/admin/verify-email-for-admin` — Verifies administrative email using OTP.
-* `POST /api/admin/admin-login` — Log in as admin and return httpOnly cookie.
-* `POST /api/admin/admin-logout` — Clear session cookies.
-* `POST /api/admin/admin-password-reset-link` — Sends reset token email.
-* `POST /api/admin/admin-password-reset/:id/:token` — Saves new admin password.
+All routes are prefixed under `/api`.
 
-* `POST /api/donor/donor-register` — Register a donor account *(requires Captcha)*.
-* `POST /api/donor/verify-email-for-donor` — Verifies donor email using OTP.
-* `POST /api/donor/donor-login` — Authenticates donor session.
-* `POST /api/donor/donor-logout` — Clear donor session cookies.
-* `POST /api/donor/donor-password-reset-link` — Sends password reset link.
-* `POST /api/donor/donor-password-reset/:id/:token` — Saves new donor password.
+### 🔐 Admin Auth (`/api/admin`)
+| Method | Route | Access | Description |
+|---|---|---|---|
+| GET | `/status` | Public | Server health check |
+| POST | `/register` | Public | Register admin (captcha required) |
+| POST | `/verify-email-for-admin` | Public | Verify OTP email |
+| POST | `/admin-login` | Public | Login (captcha required) |
+| POST | `/admin-logout` | Admin only | Clear session |
+| POST | `/admin-password-reset-link` | Public | Send reset link |
+| POST | `/admin-password-reset/:id/:token` | Public | Save new password |
 
-* `POST /api/patient/patient-register` — Register a patient account *(requires Captcha)*.
-* `POST /api/patient/verify-email-for-patient` — Verifies patient email using OTP.
-* `POST /api/patient/patient-login` — Authenticates patient session.
-* `POST /api/patient/patient-logout` — Clear patient session cookies.
-* `POST /api/patient/patient-password-reset-link` — Sends password reset link.
-* `POST /api/patient/patient-password-reset/:id/:token` — Saves new patient password.
+### 🩸 Donor Auth + Dashboard (`/api/donor`)
+| Method | Route | Access | Description |
+|---|---|---|---|
+| POST | `/donor-register` | Public | Register donor (captcha required) |
+| POST | `/verify-email-for-donor` | Public | Verify OTP email |
+| POST | `/donor-login` | Public | Login (captcha required) |
+| POST | `/donor-logout` | Donor only | Clear session |
+| GET | `/get-donor` | Donor only | Fetch own profile |
+| PUT | `/donor-update-profile` | Donor only | Update profile |
+| PUT | `/donor-change-password` | Donor only | Change password |
+| DELETE | `/donor-delete-ourself` | Donor only | Delete own account |
+| GET | `/get-all-patients-for-donor` | Donor only | Paginated patient list |
+| GET | `/get-patient-by-id-for-donor/:id` | Donor only | Single patient details |
+| GET | `/filter-all-patients` | Donor only | Filter by name/bloodGroup/location |
+| GET | `/get-all-patient-requests-for-donor` | Donor only | All blood requests received |
+| PUT | `/update-patient-request-status-by-donor/:id` | Donor only | Accept / Reject request |
+| POST | `/feedback/add` | Donor only | Submit feedback |
+| GET | `/get-stats` | Donor only | Personal dashboard stats |
 
-### 👥 Donor Dashboard Operations (Private)
-* `GET /api/donor/get-donor` — Fetches active donor profile.
-* `PUT /api/donor/donor-update-profile` — Updates donor details *(invalidates donor cache)*.
-* `PUT /api/donor/donor-change-password` — Update password securely.
-* `DELETE /api/donor/donor-delete-ourself` — Delete own donor account.
-* `GET /api/donor/get-all-patients-for-donor` — List all registered patients.
-* `GET /api/donor/get-patient-by-id-for-donor/:id` — Retrieve specific patient details.
-* `GET /api/donor/filter-all-patients` — Filter patients by location and blood group.
-* `GET /api/donor/get-all-patient-requests-for-donor` — List active blood requests sent to this donor.
-* `PUT /api/donor/update-patient-request-status-by-donor/:id` — Accept/decline patient blood request *(invalidates request cache)*.
-* `POST /api/donor/feedback/add` — Submit private feedback to administrators.
-* `GET /api/donor/get-stats` — Fetch stats for this donor.
+### 🩺 Patient Auth + Dashboard (`/api/patient`)
+| Method | Route | Access | Description |
+|---|---|---|---|
+| POST | `/patient-register` | Public | Register patient (captcha required) |
+| POST | `/verify-email-for-patient` | Public | Verify OTP email |
+| POST | `/patient-login` | Public | Login (captcha required) |
+| POST | `/patient-logout` | Patient only | Clear session |
+| GET | `/get-patient` | Patient only | Fetch own profile |
+| PUT | `/patient-update-profile` | Patient only | Update profile |
+| PUT | `/patient-change-password` | Patient only | Change password |
+| DELETE | `/patient-delete-ourself` | Patient only | Delete own account |
+| GET | `/get-all-donors-for-patient` | Patient only | Paginated donor list |
+| GET | `/get-donor-by-id-for-patient/:id` | Patient only | Single donor details |
+| GET | `/filter-donors` | Patient only | Filter by name/bloodGroup/location |
+| POST | `/send-blood-request-to-donor/:donorId` | Patient only | Send blood request |
+| GET | `/get-all-donor-requests-for-patient` | Patient only | All sent requests + status |
+| POST | `/feedback/add` | Patient only | Submit feedback |
+| GET | `/get-stats` | Patient only | Personal dashboard stats |
 
-### 🩺 Patient Dashboard Operations (Private)
-* `GET /api/patient/get-patient` — Fetches active patient profile.
-* `PUT /api/patient/patient-update-profile` — Updates patient details *(invalidates patient cache)*.
-* `PUT /api/patient/patient-change-password` — Update password securely.
-* `DELETE /api/patient/patient-delete-ourself` — Delete own patient account.
-* `GET /api/patient/get-all-donors-for-patient` — List compatible blood donors.
-* `GET /api/patient/get-donor-by-id-for-patient/:id` — Retrieve specific donor details.
-* `GET /api/patient/filter-donors` — Search donors by location and blood groups.
-* `POST /api/patient/send-blood-request-to-donor/:donorId` — Dispatch coordination request to donor.
-* `GET /api/patient/get-all-donor-requests-for-patient` — List request histories sent to donors.
-* `POST /api/patient/feedback/add` — Submit feedback.
-* `GET /api/patient/get-stats` — General aggregate statistics.
+### 🛡️ Admin Management (`/api/admin`)
+| Method | Route | Access | Description |
+|---|---|---|---|
+| GET | `/get-admin` | Admin only | Fetch own profile |
+| PUT | `/admin-update-profile` | Admin only | Update profile |
+| PUT | `/admin-change-password` | Admin only | Change password |
+| DELETE | `/admin-delete-ourself` | Admin only | Delete own account |
+| GET | `/get-all-donors-from-admin` | Admin only | Paginated donor list |
+| GET | `/getSingleDonor/:id` | Admin only | Single donor details |
+| DELETE | `/deleteSingleDonor/:id` | Admin only | Remove donor account |
+| GET | `/get-all-patients-from-admin` | Admin only | Paginated patient list |
+| GET | `/getSinglePatient/:id` | Admin only | Single patient details |
+| DELETE | `/deleteSinglePatient/:id` | Admin only | Remove patient account |
+| GET | `/get-all-admins` | Admin only | Paginated admin list |
+| PATCH | `/admin-approval/:id` | Admin only | Approve/reject admin registration |
+| PATCH | `/admin-privileges/:id` | Admin only | Toggle delete privilege for admin |
+| DELETE | `/deleteSingleAdmin/:id` | Admin only | Remove admin account |
+| GET | `/feedback/all` | Admin only | View all user feedbacks |
+| GET | `/get-stats` | Admin only | Global system statistics |
+| GET | `/filter-users` | Admin only | Search all users by type/filters |
 
-### 🛡️ Admin Management Operations (Private)
-* `GET /api/admin/get-admin` — Fetches active admin profile.
-* `PUT /api/admin/admin-update-profile` — Updates admin details.
-* `PUT /api/admin/admin-change-password` — Updates admin password.
-* `DELETE /api/admin/admin-delete-ourself` — Deletes own admin account.
-* `GET /api/admin/get-all-donors-from-admin` — View all registered blood donors.
-* `GET /api/admin/getSingleDonor/:id` — Inspect individual donor details.
-* `DELETE /api/admin/deleteSingleDonor/:id` — Administrative removal of a donor account.
-* `GET /api/admin/get-all-patients-from-admin` — View all registered patients.
-* `GET /api/admin/getSinglePatient/:id` — Inspect individual patient details.
-* `DELETE /api/admin/deleteSinglePatient/:id` — Administrative removal of a patient account.
-* `GET /api/admin/get-all-admins` — View other system administrators.
-* `PATCH /api/admin/admin-approval/:id` — Toggle authorization of pending admin registrations.
-* `PATCH /api/admin/admin-privileges/:id` — Edit system access permissions for another admin.
-* `DELETE /api/admin/deleteSingleAdmin/:id` — Delete another admin account.
-* `GET /api/admin/feedback/all` — View user feedback logs.
-* `GET /api/admin/get-stats` — Global aggregates dashboard stats.
+### 🌐 Public Feedback (`/api/public`)
+| Method | Route | Access | Description |
+|---|---|---|---|
+| POST | `/public-feedback` | Public | Submit feedback from landing page |
+| GET | `/get-public-feedbacks` | Super Admin only | View landing page feedbacks |
 
 ---
 
-## 🛠️ Operations & Setup
+## 🚀 Installation & Setup
 
-1. **Install Service Dependencies**:
-   ```bash
-   npm install
-   ```
-2. **Setup Local Environment Configurations**:
-   Create a `.env` file at the root of `unity-drop-api`:
-   ```env
-   NODE_ENV=development
-   PORT=8000
-   MONGODB_URI=mongodb://127.0.0.1:27017/unity-drop
-   JWT_SECRET=your-backend-jwt-secret
-   EMAIL_HOST=smtp.gmail.com
-   EMAIL_PORT=587
-   EMAIL_USER=your-smtp-email@gmail.com
-   EMAIL_PASS=your-smtp-app-password
-   ```
-3. **Execute Local Development Server**:
-   ```bash
-   npm run dev
-   ```
-4. **Run Backend Automated Unit Tests**:
-   ```bash
-   npm run test
-   ```
-   This will run local tests in order:
-   * **`tests/ut-1-otp-generation.test.js`**: Validates OTP generation length, expiry timer, and structure.
-   * **`tests/ut-2-password-encryption.test.js`**: Validates bcrypt password hashing and comparators.
-   * **`tests/ut-3-cache-invalidation.test.js`**: Confirms automatic cache invalidation on database modifications.
+### Prerequisites
+- **Node.js** v18 or higher
+- **MongoDB Atlas** account (or local MongoDB instance)
+- **Gmail App Password** for SMTP email delivery
+- **Google ReCAPTCHA v2** site key and secret key
+
+### Step 1 — Install Dependencies
+```bash
+npm install
+```
+
+### Step 2 — Configure Environment Variables
+Copy the template and fill in your values:
+```bash
+cp .env.example .env
+```
+
+```env
+# Server
+NODE_ENV=development
+PORT=8000
+
+# Database (MongoDB Atlas recommended)
+DATABASE_URL=mongodb+srv://<username>:<password>@cluster.mongodb.net/unitydrop?retryWrites=true&w=majority
+
+# Frontend URL (CORS whitelist)
+FRONTEND_URL=http://localhost:3000
+
+# JWT Secrets (use strong random strings)
+JWT_ACCESS_TOKEN_SECRET_KEY=your_jwt_access_secret
+JWT_REFRESH_TOKEN_SECRET_KEY=your_jwt_refresh_secret
+PASSWORD_RESET_TOKEN_PRIVATE_KEY=your_reset_token_secret
+
+# Gmail SMTP (use a Gmail App Password, not your regular password)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SERVICE=gmail
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_16_digit_app_password
+SMTP_FROM_EMAIL=your_email@gmail.com
+
+# Google reCAPTCHA v2
+RECAPTCHA_SECRET_KEY=your_recaptcha_secret_key
+
+# Expiry Durations
+CACHE_TTL_MINUTES=5
+DONATION_REQUEST_EXPIRY_DAYS=7
+OTP_EXPIRY_MINUTES=10
+PASSWORD_RESET_EXPIRY_MINUTES=10
+
+# Admin Limit
+ADMIN_QUOTA_LIMIT=2
+```
+
+### Step 3 — Start Development Server
+```bash
+npm run dev
+```
+> The API will run at **`http://localhost:8000`**
+> Port 8000 is automatically freed before startup via the `predev` script.
+
+### Step 4 — Start Production Server
+```bash
+npm start
+```
+
+---
+
+## 🔒 Security Summary
+
+| Practice | Implementation |
+|---|---|
+| Password Hashing | bcryptjs, salt factor 10, pre-save Mongoose hook |
+| Session Tokens | JWT in HttpOnly cookies (not accessible by JS) |
+| NoSQL Injection Prevention | express-mongo-sanitize |
+| XSS Prevention | express-xss-sanitizer |
+| Brute-Force Defense | express-rate-limit on auth routes |
+| HTTP Headers | Helmet |
+| Role Enforcement | authenticateJWT(['role']) middleware on every protected route |
+
+---
+
+## 📄 License
+This project is licensed under the **ISC License**.
 
 ---
 *Maintained under secure, professional development standards.* 🩸

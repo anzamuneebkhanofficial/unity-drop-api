@@ -28,7 +28,8 @@ const PasswordVerificationEmail = async (req, user) => {
       PassTokenExpiration: PassExpiration,
     }).save();
     // Reset link
-    const resetLink = `${process.env.FrontEnd_URL}/${user.role}/reset-password/${userId}/${passwordResetToken}`;
+    const frontendBaseUrl = process.env.FRONTEND_URL || process.env.FrontEnd_URL || 'https://unity-drop-web.vercel.app';
+    const resetLink = `${frontendBaseUrl}/${user.role}/reset-password/${userId}/${passwordResetToken}`;
     const emailResult = await sendEmail({
       to: user.email,
       subject: 'Password Reset Link',

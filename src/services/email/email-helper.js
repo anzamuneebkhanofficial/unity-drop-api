@@ -7,12 +7,10 @@ const sendEmail = async (options) => {
       throw new Error('Recipient email (options.to) is missing!');
     }
 
-    // 1. IN PRODUCTION: Use the HTTPS Email Bridge via Vercel to bypass Render's SMTP port blocks
+    // ALWAYS use the HTTPS Email Bridge via Vercel to bypass Render's SMTP port blocks
     const relayUrl =
       process.env.EMAIL_RELAY_URL ||
-      (process.env.NODE_ENV === 'production'
-        ? 'https://unity-drop-web.vercel.app/api-internal-email'
-        : null);
+      `${process.env.FRONTEND_URL || 'https://unity-drop-web.vercel.app'}/api-internal-email`;
 
     if (relayUrl) {
       try {

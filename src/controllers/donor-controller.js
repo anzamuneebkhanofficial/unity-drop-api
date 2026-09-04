@@ -11,6 +11,7 @@ import feedbackModel from '../models/feedback-model.js';
 import { normalizeBloodGroup, normalizeGender, VALID_BLOOD_GROUPS } from '../utils/blood-helpers.js';
 import EmailVerification from '../services/email/email-verification.js';
 import PasswordVerifyModel from '../models/password-verify-model.js';
+import sendEmail from '../services/email/email-helper.js';
 const RegisterDonor = async (req, res) => {
   try {
     const {
@@ -23,6 +24,7 @@ const RegisterDonor = async (req, res) => {
       location,
       address,
       phone,
+      availabilityStatus,
     } = req.body;
     let bloodGroup = normalizeBloodGroup(rawBloodGroup);
     let genderNormalized = normalizeGender(gender);
@@ -66,6 +68,16 @@ const RegisterDonor = async (req, res) => {
         data: null,
       });
     }
+
+    const existingPhone = await Donor.findOne({ phone });
+    if (existingPhone) {
+      return res.status(409).json({
+        message: 'Phone number already exists',
+        success: false,
+        data: null,
+      });
+    }
+
     const newDonor = new Donor({
       fullName,
       email,
@@ -75,6 +87,7 @@ const RegisterDonor = async (req, res) => {
       location,
       address,
       phone,
+      availabilityStatus: availabilityStatus || false,
     });
     await newDonor.save();
     EmailVerification(req, newDonor).catch((err) =>
@@ -86,6 +99,14 @@ const RegisterDonor = async (req, res) => {
       donor: newDonor,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      const isPhone = error.keyPattern && error.keyPattern.phone;
+      return res.status(409).json({
+        success: false,
+        message: isPhone ? 'Phone number already exists' : 'Email already exists',
+        data: null,
+      });
+    }
     Logger.error('Register Donor error:', error.message);
     res.status(500).json({ error: error.message });
   }
@@ -314,15 +335,29 @@ const DonorUpdateProfile = async (req, res, next) => {
       'longitude',
       'address',
       'bloodGroup',
+      'availabilityStatus',
     ];
-    fields.forEach((field) => {
+    for (const field of fields) {
       if (typeof body[field] !== 'undefined') {
         let val = body[field];
         if (field === 'bloodGroup') val = normalizeBloodGroup(val);
         if (field === 'gender') val = normalizeGender(val);
         newUserData[field] = val;
       }
-    });
+    }
+
+    if (newUserData.phone) {
+      const existingPhone = await Donor.findOne({
+        phone: newUserData.phone,
+        _id: { $ne: currentUser.id },
+      });
+      if (existingPhone) {
+        return res.status(409).json({
+          message: 'Phone number already exists',
+          success: false,
+        });
+      }
+    }
     if (newUserData.bloodGroup && !VALID_BLOOD_GROUPS.includes(newUserData.bloodGroup)) {
       return res.status(400).json({
         success: false,
@@ -345,6 +380,12 @@ const DonorUpdateProfile = async (req, res, next) => {
       user: updatedUser,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Phone number already exists',
+      });
+    }
     Logger.error(' Donor update error:', error.message);
     res.status(500).json({
       success: false,
@@ -365,7 +406,8 @@ const getAllPatientsForDonor = async (req, res) => {
     if (name || bloodGroup || location) {
       const patients = await Patient.find(query)
         .sort({ createdAt: -1 })
-        .select('fullName email gender bloodGroup location');
+        .select('fullName email gender bloodGroup location availabilityStatus')
+        .lean();
       result = {
         docs: patients,
         totalDocs: patients.length,
@@ -379,7 +421,8 @@ const getAllPatientsForDonor = async (req, res) => {
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
         sort: { createdAt: -1 },
-        select: 'fullName email gender bloodGroup location',
+        select: 'fullName email gender bloodGroup location availabilityStatus',
+        lean: true,
       };
       result = await Patient.paginate(query, options);
     }
@@ -409,12 +452,12 @@ const getPatientByIdForDonor = async (req, res) => {
     let patient;
     if (isApproved) {
       // Approved → show full patient details
-      patient = await Patient.findById(patientId).select('-password');
+      patient = await Patient.findById(patientId).select('-password').lean();
     } else {
       // Otherwise show limited info only
       patient = await Patient.findById(patientId).select(
-        'fullName email gender bloodGroup location phone',
-      );
+        'fullName email gender bloodGroup location phone availabilityStatus createdAt updatedAt',
+      ).lean();
     }
     Logger.info(`[DonorController] getPatientByIdForDonor - Fetched Patient: ${patient ? patient._id : 'NULL'}`);
     if (!patient) {
@@ -441,7 +484,8 @@ const getAllPatientRequestsForDonor = async (req, res) => {
     const donorId = req.user.id;
     const requests = await DonorRequest.find({ donorId })
       .populate('patientId', 'fullName email message')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     if (!requests || requests.length === 0) {
       return res.status(200).json({
         success: true,
@@ -469,14 +513,43 @@ const updatePatientRequestStatusByDonor = async (req, res) => {
     if (!['Approved', 'Rejected'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
-    const request = await DonorRequest.findById(requestId).populate(
-      'patientId',
-      '-password',
-    );
-    if (!request) return res.status(404).json({ message: 'Request not found' });
+    const request = await DonorRequest.findOneAndUpdate(
+      { _id: requestId, status: 'Pending' },
+      { $set: { status } },
+      { new: true }
+    ).populate('patientId', '-password');
+
+    if (!request) {
+      // Check if it exists but is already processed
+      const existing = await DonorRequest.findById(requestId);
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Request already processed or not in Pending state' });
+      }
+      return res.status(404).json({ success: false, message: 'Request not found' });
+    }
     const donorId = req.user.id;
-    request.status = status;
-    await request.save();
+
+    try {
+      const patient = request.patientId;
+      if (patient && patient.email) {
+        const statusText = status === 'Approved' ? '✅ Accepted' : '❌ Rejected';
+        const donorName = req.user.fullName || 'A Donor';
+        await sendEmail({
+          to: patient.email,
+          subject: `Blood Request ${statusText}`,
+          html: `
+            <h2>Hello ${patient.fullName},</h2>
+            <p>Your blood request on UnityDrop has been <strong>${status}</strong> by ${donorName}.</p>
+            <p>Please log in to your dashboard to view the update.</p>
+            <br>
+            <p>Thank you,<br>UnityDrop Team</p>
+          `
+        });
+      }
+    } catch (emailErr) {
+      Logger.error('Failed to send request status email to patient:', emailErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message:
@@ -569,7 +642,8 @@ const filterPatients = async (req, res) => {
         .select('-password')
         .sort({ createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       Patient.countDocuments(query),
     ]);
     if (!patients || patients.length === 0) {

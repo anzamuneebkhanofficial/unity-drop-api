@@ -60,7 +60,6 @@ router.post('/donor-logout', authenticateJWT(['donor']), DonorLogout);
 router.get(
   '/get-donor',
   authenticateJWT(['donor']),
-  cacheMiddleware(CacheNamespaces.DONORS),
   GetDonor
 );
 router.delete(
@@ -93,7 +92,7 @@ router.get(
 router.put(
   '/update-patient-request-status-by-donor/:id',
   authenticateJWT(['donor']),
-  autoResetCache([CacheNamespaces.REQUESTS, CacheNamespaces.STATS]),
+  autoResetCache([CacheNamespaces.REQUESTS, CacheNamespaces.STATS, CacheNamespaces.DONORS, CacheNamespaces.PATIENTS]),
   updatePatientRequestStatusByDonor,
 );
 // Profile & Feedback

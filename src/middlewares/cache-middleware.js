@@ -4,7 +4,8 @@ import { deleteByNamespace, resetEntireCache } from '../cache/utils.js';
 import Logger from '../utils/logger.js';
 export const cacheMiddleware = (namespace) => (req, res, next) => {
   const pureUrl = req.originalUrl.replace(/([&?])_t=[^&]+(&|$)/, '$1').replace(/[&?]$/, '');
-  const key = `${namespace}:${pureUrl}`;
+  const userIdentifier = req.user ? `:${req.user.id || req.user._id}` : '';
+  const key = `${namespace}:${pureUrl}${userIdentifier}`;
   const cachedData = cache.get(key);
   if (cachedData) {
     Logger.info(`🟩 [CACHE HIT] Serving [${namespace}] from memory.`);

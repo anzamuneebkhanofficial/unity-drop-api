@@ -12,6 +12,7 @@ import { normalizeBloodGroup, normalizeGender, VALID_BLOOD_GROUPS } from '../uti
 import DonorRequest from '../models/donor-request-model.js';
 import PasswordVerifyModel from '../models/password-verify-model.js';
 import EmailVerification from '../services/email/email-verification.js';
+import sendEmail from '../services/email/email-helper.js';
 const RegisterPatient = async (req, res) => {
   try {
     const {
@@ -27,6 +28,7 @@ const RegisterPatient = async (req, res) => {
       hospitalName,
       hospitalAddress,
       hospitalLocation,
+      availabilityStatus,
     } = req.body;
     let bloodGroup = normalizeBloodGroup(rawBloodGroup);
     let genderNormalized = normalizeGender(gender);
@@ -71,6 +73,16 @@ const RegisterPatient = async (req, res) => {
         data: null,
       });
     }
+
+    const existingPhone = await Patient.findOne({ phone });
+    if (existingPhone) {
+      return res.status(409).json({
+        message: 'Phone number already exists',
+        success: false,
+        data: null,
+      });
+    }
+
     const newPatient = new Patient({
       fullName,
       email,
@@ -83,6 +95,7 @@ const RegisterPatient = async (req, res) => {
       hospitalName,
       hospitalAddress,
       hospitalLocation,
+      availabilityStatus: availabilityStatus || false,
     });
     await newPatient.save();
     EmailVerification(req, newPatient).catch((err) =>
@@ -95,6 +108,14 @@ const RegisterPatient = async (req, res) => {
       patient: newPatient,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      const isPhone = error.keyPattern && error.keyPattern.phone;
+      return res.status(409).json({
+        success: false,
+        message: isPhone ? 'Phone number already exists' : 'Email already exists',
+        data: null,
+      });
+    }
     Logger.error('Register Patient error:', error.message);
     res.status(500).json({ error: error.message, success: false });
   }
@@ -327,15 +348,30 @@ const PatientUpdateProfile = async (req, res, next) => {
       'hospitalName',
       'hospitalAddress',
       'hospitalLocation',
+      'availabilityStatus',
     ];
-    fields.forEach((field) => {
+    for (const field of fields) {
       if (typeof body[field] !== 'undefined') {
         let val = body[field];
         if (field === 'bloodGroup') val = normalizeBloodGroup(val);
         if (field === 'gender') val = normalizeGender(val);
         newUserData[field] = val;
       }
-    });
+    }
+
+    if (newUserData.phone) {
+      const existingPhone = await Patient.findOne({
+        phone: newUserData.phone,
+        _id: { $ne: currentUser.id },
+      });
+      if (existingPhone) {
+        return res.status(409).json({
+          message: 'Phone number already exists',
+          success: false,
+        });
+      }
+    }
+
     if (newUserData.bloodGroup && !VALID_BLOOD_GROUPS.includes(newUserData.bloodGroup)) {
       return res.status(400).json({ success: false, message: `Invalid blood group: ${newUserData.bloodGroup}` });
     }
@@ -355,6 +391,12 @@ const PatientUpdateProfile = async (req, res, next) => {
       user: updatedUser,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Phone number already exists',
+      });
+    }
     Logger.error('Patient update error:', error.message);
     res.status(500).json({
       success: false,
@@ -391,7 +433,8 @@ const getAllDonorsForPatient = async (req, res) => {
     if (name || bloodGroup || location) {
       const donors = await Donor.find(query)
         .sort({ createdAt: -1 })
-        .select('fullName email gender bloodGroup location');
+        .select('fullName email gender bloodGroup location availabilityStatus')
+        .lean();
       result = {
         docs: donors,
         totalDocs: donors.length,
@@ -405,7 +448,8 @@ const getAllDonorsForPatient = async (req, res) => {
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
         sort: { createdAt: -1 },
-        select: 'fullName email gender bloodGroup location',
+        select: 'fullName email gender bloodGroup location availabilityStatus',
+        lean: true,
       };
       result = await Donor.paginate(query, options);
     }
@@ -437,18 +481,18 @@ const getDonorByIdForPatient = async (req, res) => {
       patientId,
       donorId: id,
       status: 'Approved',
-    });
+    }).lean();
     const requestStatus = await DonorRequest.findOne({
       patientId,
       donorId: id,
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).lean();
     let donor;
     if (approvedRequest) {
-      donor = await Donor.findById(id).select('-password');
+      donor = await Donor.findById(id).select('-password').lean();
     } else {
       donor = await Donor.findById(id).select(
-        'fullName email gender bloodGroup location phone'
-      );
+        'fullName email gender bloodGroup location phone availabilityStatus createdAt updatedAt'
+      ).lean();
     }
     Logger.info(`[PatientController] getDonorByIdForPatient - Fetched Donor: ${donor ? donor._id : 'NULL'}`);
     if (!donor) {
@@ -492,6 +536,51 @@ const sendBloodRequestToDonor = async (req, res) => {
         message: 'Donor ID and message are required',
       });
     }
+
+    if (patientAge !== undefined && patientAge !== null && patientAge !== '') {
+      const parsedAge = Number(patientAge);
+      if (isNaN(parsedAge) || !Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+        return res.status(400).json({
+          success: false,
+          message: 'Patient age must be an integer between 1 and 120',
+        });
+      }
+    }
+
+    if (bottlesRequired !== undefined && bottlesRequired !== null && bottlesRequired !== '') {
+      const parsedBottles = Number(bottlesRequired);
+      if (isNaN(parsedBottles) || !Number.isInteger(parsedBottles) || parsedBottles < 1 || parsedBottles > 20) {
+        return res.status(400).json({
+          success: false,
+          message: 'Bottles required must be an integer between 1 and 20',
+        });
+      }
+    }
+
+    if (attendantPhone !== undefined && attendantPhone !== null && attendantPhone !== '') {
+      const phoneRegex = /^\+?[0-9]{10,15}$/;
+      if (!phoneRegex.test(String(attendantPhone).trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Attendant phone must contain between 10 and 15 digits only',
+        });
+      }
+    }
+
+    if (attendantName !== undefined && attendantName !== null && attendantName !== '') {
+      const nameRegex = /^[a-zA-Z\s]{2,50}$/;
+      if (!nameRegex.test(String(attendantName).trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Attendant name must contain only alphabets and spaces (2 to 50 characters)',
+        });
+      }
+    }
+    const sanitizedAge = (patientAge !== undefined && patientAge !== null && patientAge !== '') ? Number(patientAge) : undefined;
+    const sanitizedBottles = (bottlesRequired !== undefined && bottlesRequired !== null && bottlesRequired !== '') ? String(bottlesRequired) : undefined;
+    const sanitizedName = attendantName ? String(attendantName).trim() : undefined;
+    const sanitizedPhone = attendantPhone ? String(attendantPhone).trim() : undefined;
+
     const existingRequest = await DonorRequest.findOne({ donorId, patientId });
     if (existingRequest) {
       if (existingRequest.status === 'Pending') {
@@ -509,18 +598,38 @@ const sendBloodRequestToDonor = async (req, res) => {
       if (existingRequest.status === 'Rejected') {
         existingRequest.message = message;
         existingRequest.status = 'Pending';
-        existingRequest.patientAge = patientAge;
-        existingRequest.bottlesRequired = bottlesRequired;
+        existingRequest.patientAge = sanitizedAge;
+        existingRequest.bottlesRequired = sanitizedBottles;
         existingRequest.hospitalName = hospitalName;
         existingRequest.city = city;
         existingRequest.pickAndDrop = pickAndDrop;
         existingRequest.exchangePossibility = exchangePossibility;
         existingRequest.caseDescription = caseDescription;
-        existingRequest.attendantName = attendantName;
-        existingRequest.attendantPhone = attendantPhone;
+        existingRequest.attendantName = sanitizedName;
+        existingRequest.attendantPhone = sanitizedPhone;
         existingRequest.createdAt = new Date();
         existingRequest.expiresAt = new Date(Date.now() + config.donation.requestExpiryMs);
         await existingRequest.save();
+
+        try {
+          const donor = await Donor.findById(donorId);
+          if (donor && donor.email) {
+            await sendEmail({
+              to: donor.email,
+              subject: '🩸 Blood Request Resent',
+              html: `
+                <h2>Hello ${donor.fullName},</h2>
+                <p>A patient has updated and resent their blood request to you.</p>
+                <p><strong>New Message:</strong> ${message}</p>
+                <p>Please log in to your dashboard to review the updated details.</p>
+                <br>
+                <p>Thank you,<br>UnityDrop Team</p>
+              `
+            });
+          }
+        } catch (emailErr) {
+          Logger.error('Failed to send resent blood request email:', emailErr.message);
+        }
         return res.status(200).json({
           success: true,
           message: 'Request re-sent successfully after rejection',
@@ -532,18 +641,39 @@ const sendBloodRequestToDonor = async (req, res) => {
       donorId,
       patientId,
       message,
-      patientAge,
-      bottlesRequired,
+      patientAge: sanitizedAge,
+      bottlesRequired: sanitizedBottles,
       hospitalName,
       city,
       pickAndDrop,
       exchangePossibility,
       caseDescription,
-      attendantName,
-      attendantPhone,
+      attendantName: sanitizedName,
+      attendantPhone: sanitizedPhone,
       status: 'Pending',
       expiresAt: new Date(Date.now() + config.donation.requestExpiryMs),
     });
+
+    try {
+      const donor = await Donor.findById(donorId);
+      if (donor && donor.email) {
+        await sendEmail({
+          to: donor.email,
+          subject: '🩸 New Blood Request Received',
+          html: `
+            <h2>Hello ${donor.fullName},</h2>
+            <p>You have received a new blood request from a patient on UnityDrop.</p>
+            <p><strong>Message:</strong> ${message}</p>
+            <p><strong>Hospital:</strong> ${hospitalName || 'Not specified'}</p>
+            <p>Please log in to your dashboard to view the full details and Accept or Reject the request.</p>
+            <br>
+            <p>Thank you,<br>UnityDrop Team</p>
+          `
+        });
+      }
+    } catch (emailErr) {
+      Logger.error('Failed to send blood request email to donor:', emailErr.message);
+    }
     res.status(201).json({
       success: true,
       message: 'Blood request sent successfully',
@@ -611,7 +741,8 @@ const filterDonors = async (req, res) => {
         .select('-password')
         .sort({ createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       Donor.countDocuments(query),
     ]);
     if (!donors || donors.length === 0) {
@@ -650,7 +781,8 @@ const getAllDonorRequestsForPatient = async (req, res) => {
     const patientId = req.user.id;
     const requests = await DonorRequest.find({ patientId })
       .populate('donorId', 'fullName email phone bloodGroup location')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.status(200).json({
       success: true,
       message: 'Requests fetched successfully',

@@ -59,7 +59,6 @@ router.post('/patient-logout', authenticateJWT(['patient']), PatientLogout);
 router.get(
   '/get-patient',
   authenticateJWT(['patient']),
-  cacheMiddleware(CacheNamespaces.PATIENTS),
   GetPatient
 );
 router.delete(
@@ -92,7 +91,7 @@ router.get('/filter-donors', authenticateJWT(['patient']), cacheMiddleware(Cache
 router.post(
   '/send-blood-request-to-donor/:donorId',
   authenticateJWT(['patient']),
-  autoResetCache([CacheNamespaces.REQUESTS, CacheNamespaces.STATS]),
+  autoResetCache([CacheNamespaces.REQUESTS, CacheNamespaces.STATS, CacheNamespaces.DONORS]),
   sendBloodRequestToDonor
 );
 router.get(

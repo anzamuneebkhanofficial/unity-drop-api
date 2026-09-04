@@ -20,7 +20,7 @@ export const getPublicFeedbacks = async (req, res) => {
     if (!req.user.isSuperAdmin) {
       return res.status(403).json({ success: false, message: 'Access denied. Super Admin only.' });
     }
-    const feedbacks = await PublicFeedback.find().sort({ createdAt: -1 }).limit(100);
+    const feedbacks = await PublicFeedback.find().sort({ createdAt: -1 }).limit(100).lean();
     res.status(200).json({ success: true, feedbacks });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });

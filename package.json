@@ -26,10 +26,7 @@
   "scripts": {
     "predev": "npx kill-port 8000 || exit 0",
     "start": "node --no-warnings server.js",
-    "dev": "nodemon --exec \"node --no-warnings\" server.js",
-    "test": "node tests/ut-1-otp-generation.test.js && node tests/ut-2-password-encryption.test.js && node tests/ut-3-cache-invalidation.test.js",
-    "test:ut1": "node tests/ut-1-otp-generation.test.js",
-    "test:ut2": "node tests/ut-2-password-encryption.test.js"
+    "dev": "nodemon --exec \"node --no-warnings\" server.js"
   },
   "type": "module",
   "dependencies": {

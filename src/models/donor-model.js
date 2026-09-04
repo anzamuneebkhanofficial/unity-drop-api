@@ -40,6 +40,11 @@ const DonorSchema = new mongoose.Schema(
       type: String,
       required: true,
       index: true,
+      unique: true,
+    },
+    availabilityStatus: {
+      type: Boolean,
+      default: false,
     },
     emailVerified: {
       type: Boolean,
