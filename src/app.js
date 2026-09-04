@@ -52,6 +52,11 @@ app.use(cookieParser());
 app.use(passport.initialize());
 // API ROUTES
 app.use('/api', FinalAdminRoutes);
+
+// Root route for Render health check
+app.all('/', (req, res) => {
+  res.status(200).send('UnityDrop API is running.');
+});
 //  404 Handler
 app.use((req, res, next) => {
   const err = new Error(`Route not found: ${req.originalUrl}`);
